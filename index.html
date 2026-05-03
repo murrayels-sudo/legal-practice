@@ -391,7 +391,10 @@ tbody tr:hover td{background:#fafaf8}
       <div class="page content" id="page-invoices">
         <div class="search-row">
           <input class="search-input" placeholder="Search invoices..." id="s-invoices" oninput="renderInvoices()">
-          <div style="display:flex;gap:8px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <select id="stmt-client" class="search-input" style="width:200px"><option value="">— Statement for client —</option></select>
+            <select id="stmt-matter" class="search-input" style="width:200px"><option value="">All matters</option></select>
+            <button class="btn btn-gold" onclick="printStatement()">🖨 Print Statement</button>
             <button class="btn btn-primary" onclick="openModal('m-invoice')">+ New invoice</button>
           </div>
         </div>
@@ -940,11 +943,26 @@ function markPaid(id){
   const inv=db.invoices.find(x=>x.id===id);if(inv){inv.status='Paid';save();renderInvoices();renderDashboard();}
 }
 function renderInvoices(){
+  // Populate statement client dropdown
+  const sc=document.getElementById('stmt-client');
+  if(sc){
+    const curC=sc.value;
+    sc.innerHTML='<option value="">— Statement for client —</option>';
+    db.clients.forEach(c=>sc.innerHTML+=`<option value="${c.id}">${c.fname} ${c.lname}</option>`);
+    sc.value=curC;
+    sc.onchange=function(){
+      const sm=document.getElementById('stmt-matter');
+      if(!sm)return;
+      const cid=this.value;
+      sm.innerHTML='<option value="">All matters</option>';
+      db.matters.filter(m=>m.client===cid).forEach(m=>sm.innerHTML+=`<option value="${m.id}">${m.ref} — ${m.desc}</option>`);
+    };
+  }
   const q=(v('s-invoices')||'').toLowerCase();
   const rows=db.invoices.filter(i=>(i.num+clientName(i.client)+i.status).toLowerCase().includes(q));
   const tb=document.getElementById('t-invoices');
   if(!rows.length){tb.innerHTML=`<tr><td colspan="10" class="empty-msg">No invoices yet.</td></tr>`;return;}
-  tb.innerHTML=rows.map(i=>`<tr><td><strong>${i.num}</strong></td><td>${clientName(i.client)}</td><td>${i.matter?matterRef(i.matter):'—'}</td><td>${fmtDate(i.date)}</td><td>${fmtDate(i.due)}</td><td>${fmtMoney(i.amount)}</td><td>${fmtMoney(i.gst)}</td><td><strong>${fmtMoney(i.total)}</strong></td><td>${badge(i.status)}</td><td style="white-space:nowrap">${i.status!=='Paid'?`<button class="btn btn-sm btn-gold" onclick="markPaid('${i.id}')">Paid</button> `:''}<button class="btn btn-sm" onclick="editInvoice('${i.id}')">Edit</button> <button class="btn-danger" onclick="delRow('invoices','${i.id}',renderInvoices)">×</button></td></tr>`).join('');
+  tb.innerHTML=rows.map(i=>`<tr><td><strong>${i.num}</strong></td><td>${clientName(i.client)}</td><td>${i.matter?matterRef(i.matter):'—'}</td><td>${fmtDate(i.date)}</td><td>${fmtDate(i.due)}</td><td>${fmtMoney(i.amount)}</td><td>${fmtMoney(i.gst)}</td><td><strong>${fmtMoney(i.total)}</strong></td><td>${badge(i.status)}</td><td style="white-space:nowrap">${i.status!=='Paid'?`<button class="btn btn-sm btn-gold" onclick="markPaid('${i.id}')">Paid</button> `:''}<button class="btn btn-sm" onclick="editInvoice('${i.id}')">Edit</button> <button class="btn btn-sm btn-primary" onclick="printInvoice('${i.id}')">🖨 Print</button> <button class="btn-danger" onclick="delRow('invoices','${i.id}',renderInvoices)">×</button></td></tr>`).join('');
 }
 
 // ═══════════════════════════════════════════════
@@ -1192,6 +1210,352 @@ function createInvoiceFromActivity(matterId){
   renderActivity();
   showPage('invoices');
 }
+
+// ═══════════════════════════════════════════════
+// PRINT STATEMENT
+// ═══════════════════════════════════════════════
+function printStatement(){
+  const cid=v('stmt-client');
+  const mid=v('stmt-matter');
+  if(!cid){alert('Please select a client from the dropdown first.');return;}
+
+  const client=db.clients.find(x=>x.id===cid)||{};
+  const clientFullName=client.fname?client.fname+' '+client.lname:'Unknown Client';
+
+  // Filter invoices
+  let invs=db.invoices.filter(i=>i.client===cid);
+  if(mid)invs=invs.filter(i=>i.matter===mid);
+  invs=invs.slice().sort((a,b)=>a.date.localeCompare(b.date));
+
+  if(!invs.length){alert('No invoices found for this client'+(mid?' and matter':'')+'.');return;}
+
+  // Totals
+  const totalAmt=invs.reduce((s,i)=>s+i.total,0);
+  const totalPaid=invs.filter(i=>i.status==='Paid').reduce((s,i)=>s+i.total,0);
+  const totalOut=totalAmt-totalPaid;
+  const totalGST=invs.reduce((s,i)=>s+i.gst,0);
+
+  // Matter heading
+  const matterLabel=mid?(()=>{const m=db.matters.find(x=>x.id===mid);return m?m.ref+' — '+m.desc:'Selected matter';})():'All Matters';
+
+  // Group by matter if showing all
+  let bodyHTML='';
+  if(!mid){
+    // Group invoices by matter
+    const byMatter={};
+    const noMatter=[];
+    invs.forEach(i=>{
+      if(i.matter){byMatter[i.matter]=byMatter[i.matter]||[];byMatter[i.matter].push(i);}
+      else noMatter.push(i);
+    });
+    if(noMatter.length)byMatter['__none']=noMatter;
+
+    Object.entries(byMatter).forEach(([matId,matInvs])=>{
+      const m=db.matters.find(x=>x.id===matId);
+      const mLabel=m?m.ref+' — '+m.desc:'General';
+      const mTotal=matInvs.reduce((s,i)=>s+i.total,0);
+      const mPaid=matInvs.filter(i=>i.status==='Paid').reduce((s,i)=>s+i.total,0);
+      bodyHTML+=`
+        <tr><td colspan="7" style="background:#1B2A4A;color:#B8972A;padding:9px 14px;font-size:12px;font-weight:700;letter-spacing:0.05em">${mLabel}</td></tr>
+        ${matInvs.map((i,idx)=>invoiceRow(i,idx)).join('')}
+        <tr style="background:#f0ede8">
+          <td colspan="4" style="padding:8px 14px;font-size:12px;color:#888;font-style:italic">Matter subtotal</td>
+          <td style="padding:8px 14px;font-size:12px;text-align:right"></td>
+          <td style="padding:8px 14px;font-size:13px;font-weight:600;text-align:right">${fmtMoney(mTotal)}</td>
+          <td style="padding:8px 14px;font-size:12px;text-align:right;color:${mPaid<mTotal?'#a32d2d':'#2d7a3a'}">${mPaid<mTotal?fmtMoney(mTotal-mPaid)+' owing':'Paid'}</td>
+        </tr>`;
+    });
+  } else {
+    bodyHTML=invs.map((i,idx)=>invoiceRow(i,idx)).join('');
+  }
+
+  function invoiceRow(i,idx){
+    const statusCol=i.status==='Paid'?'#2d7a3a':i.status==='Overdue'?'#a32d2d':'#1a5fa8';
+    return`<tr style="background:${idx%2===1?'#f8f7f5':'#fff'}">
+      <td style="padding:10px 14px;border-bottom:1px solid #eee;font-size:13px">${fmtDate(i.date)}</td>
+      <td style="padding:10px 14px;border-bottom:1px solid #eee;font-size:13px;font-weight:600;color:#1B2A4A">${i.num}</td>
+      <td style="padding:10px 14px;border-bottom:1px solid #eee;font-size:12px;color:#555;max-width:220px">${(i.desc||'Legal services').split('\n')[0]}</td>
+      <td style="padding:10px 14px;border-bottom:1px solid #eee;font-size:13px;text-align:right">${fmtDate(i.due)}</td>
+      <td style="padding:10px 14px;border-bottom:1px solid #eee;font-size:13px;text-align:right">${fmtMoney(i.gst)}</td>
+      <td style="padding:10px 14px;border-bottom:1px solid #eee;font-size:13px;font-weight:600;text-align:right">${fmtMoney(i.total)}</td>
+      <td style="padding:10px 14px;border-bottom:1px solid #eee;text-align:right"><span style="background:${statusCol};color:#fff;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600">${i.status}</span></td>
+    </tr>`;
+  }
+
+  const html=`<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Statement — ${clientFullName}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Georgia,serif;color:#333;background:#fff}
+  @page{margin:15mm 18mm;size:A4}
+  @media print{body{padding:0}.no-print{display:none!important}}
+  .page{max-width:820px;margin:0 auto;padding:0}
+  .print-btn{position:fixed;bottom:24px;right:24px;background:#1B2A4A;color:#fff;border:none;padding:12px 24px;border-radius:8px;font-size:14px;cursor:pointer;font-family:Georgia,serif;box-shadow:0 4px 12px rgba(0,0,0,0.2)}
+  .print-btn:hover{background:#243a63}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- HEADER -->
+  <div style="background:#1B2A4A;padding:6px 0"></div>
+  <div style="padding:24px 32px 16px;border-bottom:3px solid #B8972A;text-align:center">
+    <div style="font-size:28px;font-weight:700;color:#1B2A4A;letter-spacing:0.06em">MURRAY EDWARDS</div>
+    <div style="font-size:13px;color:#B8972A;letter-spacing:0.2em;margin-top:4px">L E G A L &nbsp; S E R V I C E S</div>
+    <div style="font-size:11px;color:#888;margin-top:8px">${settings.address||'Central Coast, NSW'} &nbsp;•&nbsp; ${settings.phone||'0411 590 065'} &nbsp;•&nbsp; ${settings.email||'murrayels@gmail.com'} &nbsp;•&nbsp; ABN ${settings.abn||'22 318 545 945'}</div>
+  </div>
+
+  <!-- STATEMENT TITLE -->
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:24px 32px 8px">
+    <div>
+      <div style="font-size:30px;font-weight:700;color:#1B2A4A">STATEMENT OF ACCOUNT</div>
+      <div style="font-size:12px;color:#888;margin-top:6px">As at ${new Date().toLocaleDateString('en-AU',{day:'2-digit',month:'long',year:'numeric'})}</div>
+    </div>
+    <div style="text-align:right">
+      <div style="font-size:10px;font-weight:700;color:#B8972A;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px">Prepared for</div>
+      <div style="font-size:16px;font-weight:700;color:#1B2A4A">${clientFullName}</div>
+      ${client.address?`<div style="font-size:12px;color:#555;margin-top:3px">${client.address}</div>`:''}
+      ${client.email?`<div style="font-size:12px;color:#555;margin-top:3px">${client.email}</div>`:''}
+      <div style="font-size:12px;color:#555;margin-top:6px;font-style:italic">${matterLabel}</div>
+    </div>
+  </div>
+
+  <!-- GOLD RULE -->
+  <div style="height:2px;background:#B8972A;margin:0 32px 20px"></div>
+
+  <!-- SUMMARY BOXES -->
+  <div style="display:flex;gap:12px;margin:0 32px 24px">
+    <div style="flex:1;background:#f8f7f5;border:1px solid #e0ddd8;border-radius:8px;padding:14px;text-align:center">
+      <div style="font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px">Total Invoiced</div>
+      <div style="font-size:22px;font-weight:700;color:#1B2A4A">${fmtMoney(totalAmt)}</div>
+    </div>
+    <div style="flex:1;background:#eaf5ec;border:1px solid #a0d8a8;border-radius:8px;padding:14px;text-align:center">
+      <div style="font-size:10px;font-weight:700;color:#2d7a3a;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px">Total Paid</div>
+      <div style="font-size:22px;font-weight:700;color:#2d7a3a">${fmtMoney(totalPaid)}</div>
+    </div>
+    <div style="flex:1;background:${totalOut>0?'#fdf0f0':'#eaf5ec'};border:1px solid ${totalOut>0?'#f0a0a0':'#a0d8a8'};border-radius:8px;padding:14px;text-align:center">
+      <div style="font-size:10px;font-weight:700;color:${totalOut>0?'#a32d2d':'#2d7a3a'};text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px">Balance Outstanding</div>
+      <div style="font-size:22px;font-weight:700;color:${totalOut>0?'#a32d2d':'#2d7a3a'}">${fmtMoney(totalOut)}</div>
+    </div>
+    <div style="flex:1;background:#f8f7f5;border:1px solid #e0ddd8;border-radius:8px;padding:14px;text-align:center">
+      <div style="font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px">GST Charged</div>
+      <div style="font-size:22px;font-weight:700;color:#1B2A4A">${fmtMoney(totalGST)}</div>
+    </div>
+  </div>
+
+  <!-- INVOICES TABLE -->
+  <div style="margin:0 32px">
+    <table style="width:100%;border-collapse:collapse">
+      <thead>
+        <tr style="background:#1B2A4A">
+          <th style="padding:10px 14px;text-align:left;font-size:11px;color:#fff;font-weight:600;letter-spacing:0.05em">Date</th>
+          <th style="padding:10px 14px;text-align:left;font-size:11px;color:#fff;font-weight:600;letter-spacing:0.05em">Invoice #</th>
+          <th style="padding:10px 14px;text-align:left;font-size:11px;color:#fff;font-weight:600;letter-spacing:0.05em">Description</th>
+          <th style="padding:10px 14px;text-align:right;font-size:11px;color:#fff;font-weight:600;letter-spacing:0.05em">Due Date</th>
+          <th style="padding:10px 14px;text-align:right;font-size:11px;color:#fff;font-weight:600;letter-spacing:0.05em">GST</th>
+          <th style="padding:10px 14px;text-align:right;font-size:11px;color:#fff;font-weight:600;letter-spacing:0.05em">Total</th>
+          <th style="padding:10px 14px;text-align:right;font-size:11px;color:#fff;font-weight:600;letter-spacing:0.05em">Status</th>
+        </tr>
+      </thead>
+      <tbody>${bodyHTML}</tbody>
+      <tfoot>
+        <tr style="background:#1B2A4A">
+          <td colspan="5" style="padding:12px 14px;font-size:13px;font-weight:700;color:#fff">TOTAL</td>
+          <td style="padding:12px 14px;font-size:14px;font-weight:700;color:#B8972A;text-align:right">${fmtMoney(totalAmt)}</td>
+          <td style="padding:12px 14px;font-size:13px;font-weight:700;color:${totalOut>0?'#ff9999':'#99ffaa'};text-align:right">${totalOut>0?fmtMoney(totalOut)+' owing':'Fully paid'}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <!-- PAYMENT NOTE -->
+  ${totalOut>0?`
+  <div style="margin:24px 32px 0;background:#fdf3e0;border-top:2px solid #B8972A;border-bottom:2px solid #B8972A;padding:14px">
+    <div style="font-size:11px;font-weight:700;color:#1B2A4A;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:8px">Payment Details</div>
+    <div style="font-size:12px;color:#555;line-height:1.8">
+      <strong>Account name:</strong> Murray Edwards Legal Services &nbsp;&nbsp;
+      <strong>BSB:</strong> [000-000] &nbsp;&nbsp;
+      <strong>Account No:</strong> [000 000 000]<br>
+      Please reference your invoice number(s) when making payment. Payment due within 30 days of invoice date.
+    </div>
+  </div>`:'<div style="margin:24px 32px 0;background:#eaf5ec;border:1px solid #a0d8a8;border-radius:8px;padding:14px;text-align:center;font-size:13px;color:#2d7a3a;font-weight:600">✓ Account fully paid — thank you!</div>'}
+
+  <!-- FOOTER -->
+  <div style="margin:20px 32px;text-align:center;font-size:11px;color:#aaa;border-top:1px solid #eee;padding-top:14px">
+    Murray Edwards Legal Services &nbsp;•&nbsp; ABN ${settings.abn||'22 318 545 945'} &nbsp;•&nbsp; ${settings.address||'Central Coast, NSW'} &nbsp;•&nbsp; ${settings.phone||'0411 590 065'}
+  </div>
+
+</div>
+<button class="print-btn no-print" onclick="window.print()">🖨 Print / Save as PDF</button>
+</body>
+</html>`;
+
+  const w=window.open('','_blank');
+  w.document.write(html);
+  w.document.close();
+}
+
+
+// ═══════════════════════════════════════════════
+// PRINT INVOICE
+// ═══════════════════════════════════════════════
+function printInvoice(invId){
+  const inv=db.invoices.find(x=>x.id===invId);
+  if(!inv){alert('Invoice not found.');return;}
+  const client=db.clients.find(x=>x.id===inv.client)||{};
+  const matter=db.matters.find(x=>x.id===inv.matter)||{};
+  const clientFullName=client.fname?client.fname+' '+client.lname:'—';
+  const acts=db.activities.filter(a=>a.matter===inv.matter&&a.billed==='billed');
+
+  // Build line items — from activity log if available, else use invoice description
+  let lineItemsHTML='';
+  if(acts.length){
+    lineItemsHTML=acts.map((a,i)=>`
+      <tr style="background:${i%2===1?'#f8f7f5':'#fff'}">
+        <td style="padding:10px 14px;border-bottom:1px solid #e8e8e8;font-size:13px">${fmtDate(a.date)}: ${a.desc}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid #e8e8e8;font-size:13px;text-align:center">${a.hours||'—'}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid #e8e8e8;font-size:13px;text-align:right">${a.rate?'$'+parseFloat(a.rate).toFixed(2):'—'}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid #e8e8e8;font-size:13px;text-align:right">${fmtMoney(a.amount)}</td>
+      </tr>`).join('');
+  } else {
+    // Use description lines from invoice
+    const lines=(inv.desc||'Legal services rendered').split('\n');
+    lineItemsHTML=lines.map((line,i)=>`
+      <tr style="background:${i%2===1?'#f8f7f5':'#fff'}">
+        <td style="padding:10px 14px;border-bottom:1px solid #e8e8e8;font-size:13px" colspan="3">${line}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid #e8e8e8;font-size:13px;text-align:right"></td>
+      </tr>`).join('');
+  }
+
+  const statusColour=inv.status==='Paid'?'#2d7a3a':inv.status==='Overdue'?'#a32d2d':'#1a5fa8';
+
+  const html=`<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Invoice ${inv.num} — Murray Edwards Legal Services</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Georgia,serif;color:#333;background:#fff;padding:0}
+  @page{margin:15mm 18mm;size:A4}
+  @media print{
+    body{padding:0}
+    .no-print{display:none!important}
+    .page{box-shadow:none!important;margin:0!important;border-radius:0!important}
+  }
+  .page{max-width:800px;margin:0 auto;padding:0}
+  .print-btn{position:fixed;bottom:24px;right:24px;background:#1B2A4A;color:#fff;border:none;padding:12px 24px;border-radius:8px;font-size:14px;cursor:pointer;font-family:Georgia,serif;box-shadow:0 4px 12px rgba(0,0,0,0.2)}
+  .print-btn:hover{background:#243a63}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- HEADER -->
+  <div style="background:#1B2A4A;padding:6px 0;margin-bottom:0"></div>
+  <div style="padding:24px 32px 16px;border-bottom:3px solid #B8972A;text-align:center">
+    <div style="font-size:28px;font-weight:700;color:#1B2A4A;letter-spacing:0.06em">MURRAY EDWARDS</div>
+    <div style="font-size:13px;color:#B8972A;letter-spacing:0.2em;margin-top:4px">L E G A L &nbsp; S E R V I C E S</div>
+    <div style="font-size:11px;color:#888;margin-top:8px">${settings.address||'Central Coast, NSW'} &nbsp;•&nbsp; ${settings.phone||'0411 590 065'} &nbsp;•&nbsp; ${settings.email||'murrayels@gmail.com'} &nbsp;•&nbsp; ABN ${settings.abn||'22 318 545 945'}</div>
+  </div>
+
+  <!-- INVOICE TITLE + NUMBER -->
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:24px 32px 16px">
+    <div>
+      <div style="font-size:36px;font-weight:700;color:#1B2A4A;letter-spacing:0.04em">INVOICE</div>
+      <div style="display:inline-block;background:${statusColour};color:#fff;padding:3px 12px;border-radius:999px;font-size:12px;font-weight:600;margin-top:8px">${inv.status.toUpperCase()}</div>
+    </div>
+    <div style="text-align:right">
+      <table style="font-size:13px;border-collapse:collapse">
+        <tr><td style="padding:3px 8px;color:#888;text-align:right">Invoice No:</td><td style="padding:3px 8px;font-weight:700;color:#1B2A4A">${inv.num}</td></tr>
+        <tr><td style="padding:3px 8px;color:#888;text-align:right">Date:</td><td style="padding:3px 8px">${fmtDate(inv.date)}</td></tr>
+        <tr><td style="padding:3px 8px;color:#888;text-align:right">Due date:</td><td style="padding:3px 8px">${fmtDate(inv.due)}</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- GOLD RULE -->
+  <div style="height:2px;background:#B8972A;margin:0 32px"></div>
+
+  <!-- BILL TO + MATTER -->
+  <div style="display:flex;gap:32px;padding:20px 32px">
+    <div style="flex:1">
+      <div style="font-size:10px;font-weight:700;color:#B8972A;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px">Bill To</div>
+      <div style="font-size:15px;font-weight:700;color:#1B2A4A">${clientFullName}</div>
+      ${client.address?`<div style="font-size:13px;color:#555;margin-top:3px">${client.address}</div>`:''}
+      ${client.email?`<div style="font-size:13px;color:#555;margin-top:3px">${client.email}</div>`:''}
+      ${client.phone?`<div style="font-size:13px;color:#555;margin-top:3px">${client.phone}</div>`:''}
+    </div>
+    <div style="flex:1">
+      <div style="font-size:10px;font-weight:700;color:#B8972A;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px">Matter</div>
+      ${matter.ref?`<div style="font-size:13px;font-weight:700;color:#1B2A4A">${matter.ref}</div>`:''}
+      ${matter.desc?`<div style="font-size:13px;color:#555;margin-top:3px">${matter.desc}</div>`:''}
+      ${matter.type?`<div style="font-size:13px;color:#555;margin-top:3px">${matter.type}</div>`:''}
+    </div>
+  </div>
+
+  <!-- LINE ITEMS TABLE -->
+  <div style="margin:0 32px">
+    <table style="width:100%;border-collapse:collapse">
+      <thead>
+        <tr style="background:#1B2A4A">
+          <th style="padding:11px 14px;text-align:left;font-size:12px;color:#fff;font-weight:600;letter-spacing:0.05em">Description</th>
+          <th style="padding:11px 14px;text-align:center;font-size:12px;color:#fff;font-weight:600;letter-spacing:0.05em;width:80px">Hours</th>
+          <th style="padding:11px 14px;text-align:right;font-size:12px;color:#fff;font-weight:600;letter-spacing:0.05em;width:100px">Rate</th>
+          <th style="padding:11px 14px;text-align:right;font-size:12px;color:#fff;font-weight:600;letter-spacing:0.05em;width:110px">Amount</th>
+        </tr>
+      </thead>
+      <tbody>${lineItemsHTML}</tbody>
+    </table>
+  </div>
+
+  <!-- TOTALS -->
+  <div style="display:flex;justify-content:flex-end;margin:0 32px">
+    <table style="border-collapse:collapse;min-width:280px">
+      <tr>
+        <td style="padding:8px 14px;font-size:13px;color:#555;text-align:right;border-bottom:1px solid #eee">Subtotal</td>
+        <td style="padding:8px 14px;font-size:13px;text-align:right;border-bottom:1px solid #eee">${fmtMoney(inv.amount)}</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 14px;font-size:13px;color:#555;text-align:right;border-bottom:1px solid #eee">GST (10%)</td>
+        <td style="padding:8px 14px;font-size:13px;text-align:right;border-bottom:1px solid #eee">${fmtMoney(inv.gst)}</td>
+      </tr>
+      <tr style="background:#1B2A4A">
+        <td style="padding:11px 14px;font-size:14px;font-weight:700;color:#fff;text-align:right">TOTAL DUE</td>
+        <td style="padding:11px 14px;font-size:14px;font-weight:700;color:#B8972A;text-align:right">${fmtMoney(inv.total)}</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- PAYMENT DETAILS -->
+  <div style="margin:24px 32px 0;background:#f8f7f5;border-top:2px solid #B8972A;border-bottom:2px solid #B8972A;padding:16px">
+    <div style="font-size:11px;font-weight:700;color:#1B2A4A;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:10px">Payment Details</div>
+    <div style="font-size:12px;color:#555;line-height:1.8">
+      <strong>Account name:</strong> Murray Edwards Legal Services &nbsp;&nbsp;
+      <strong>BSB:</strong> [000-000] &nbsp;&nbsp;
+      <strong>Account No:</strong> [000 000 000]<br>
+      Please reference <strong>${inv.num}</strong> when making payment. Payment due within 30 days.
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div style="margin:20px 32px;text-align:center;font-size:11px;color:#aaa;border-top:1px solid #eee;padding-top:14px">
+    Murray Edwards Legal Services &nbsp;•&nbsp; ABN ${settings.abn||'22 318 545 945'} &nbsp;•&nbsp; ${settings.address||'Central Coast, NSW'} &nbsp;•&nbsp; ${settings.phone||'0411 590 065'}
+  </div>
+
+</div>
+<button class="print-btn no-print" onclick="window.print()">🖨 Print / Save as PDF</button>
+</body>
+</html>`;
+
+  const w=window.open('','_blank');
+  w.document.write(html);
+  w.document.close();
+}
+
 
 function delRow(type,id,cb){
   if(!confirm('Delete this record? This cannot be undone.'))return;
