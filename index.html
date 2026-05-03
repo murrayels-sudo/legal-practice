@@ -873,16 +873,16 @@ function checkConflicts(nameToCheck, descToCheck){
   const descLower = (descToCheck||'').toLowerCase().trim();
   const seenClients = [];
 
-  // Only match if the full search term appears in the client name
+  // Split search name into parts and match against existing client name parts
+  const searchParts = nameLower.split(' ').filter(p=>p.length>2);
   db.clients.forEach(c=>{
-    const fullName = (c.fname+' '+c.lname).toLowerCase();
-    // Must be a substring match of the whole search term, not word-by-word
-    if(nameLower.length>2 && fullName.includes(nameLower) && fullName !== nameLower){
-      if(!seenClients.includes(c.id)){
-        seenClients.push(c.id);
-        const matters = db.matters.filter(m=>m.client===c.id);
-        results.push('Client: '+c.fname+' '+c.lname+(matters.length?' — matters: '+matters.map(m=>m.ref).join(', '):''));
-      }
+    const existingFull = (c.fname+' '+c.lname).toLowerCase();
+    const existingParts = existingFull.split(' ').filter(p=>p.length>2);
+    const hasMatch = searchParts.some(sp=>existingParts.some(ep=>ep===sp||ep.includes(sp)||sp.includes(ep)));
+    if(hasMatch && existingFull!==nameLower && !seenClients.includes(c.id)){
+      seenClients.push(c.id);
+      const matters = db.matters.filter(m=>m.client===c.id);
+      results.push('Client: '+c.fname+' '+c.lname+(matters.length?' — matters: '+matters.map(m=>m.ref).join(', '):''));
     }
   });
 
@@ -897,7 +897,7 @@ function checkConflicts(nameToCheck, descToCheck){
         if(hits.length>=2){
           const mc = db.clients.find(x=>x.id===m.client);
           const mcName = mc ? mc.fname+' '+mc.lname : 'Unknown';
-          if(mcName.toLowerCase() !== nameLower){
+          if(mcName.toLowerCase()!==nameLower){
             results.push('Matter: '+m.ref+' ('+mcName+') — '+m.desc);
           }
         }
