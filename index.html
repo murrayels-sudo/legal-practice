@@ -839,7 +839,7 @@ function closeModal(id){
   // clear hidden id fields
   ['c-id','mat-id','appt-id','doc-id','inv-id','exp-id'].forEach(f=>{const el=document.getElementById(f);if(el)el.value='';});
 }
-document.querySelectorAll('.modal-overlay').forEach(o=>o.addEventListener('click',function(e){if(e.target===this)this.classList.remove('open');}));
+document.querySelectorAll('.modal-overlay').forEach(o=>o.addEventListener('click',function(e){if(e.target===this&&this.id!=='m-conflict')this.classList.remove('open');}));
 
 function populateClientSelects(){
   ['mat-client','appt-client','inv-client','doc-client','act-client'].forEach(sid=>{
@@ -863,18 +863,30 @@ function filterMattersForClient(clientSelectId,matterSelectId){
 // ═══════════════════════════════════════════════
 // Pending save state for conflict modal
 let _pendingSave=null;
+let _pendingOriginModal=null;
 
 function conflictDecision(proceed){
-  closeModal('m-conflict');
-  if(proceed&&_pendingSave){_pendingSave();_pendingSave=null;}
-  else{_pendingSave=null;}
+  document.getElementById('m-conflict').classList.remove('open');
+  if(proceed&&_pendingSave){
+    _pendingSave();
+  } else {
+    // Reopen the originating modal so user can continue editing
+    if(_pendingOriginModal){
+      setTimeout(()=>document.getElementById(_pendingOriginModal).classList.add('open'),100);
+    }
+  }
+  _pendingSave=null;
+  _pendingOriginModal=null;
 }
 
-function showConflictModal(conflicts,msg,onProceed){
+function showConflictModal(conflicts,msg,originModal,onProceed){
+  // Close the originating modal while showing conflict
+  if(originModal)document.getElementById(originModal).classList.remove('open');
   document.getElementById('conflict-modal-msg').textContent=msg;
   document.getElementById('conflict-modal-list').innerHTML=conflicts.map(r=>`<div class="acct-row"><span style="font-size:13px;color:var(--amber)">⚠</span> <span style="font-size:13px">${r}</span></div>`).join('');
   _pendingSave=onProceed;
-  document.getElementById('m-conflict').classList.add('open');
+  _pendingOriginModal=originModal;
+  setTimeout(()=>document.getElementById('m-conflict').classList.add('open'),150);
 }
 
 function saveClient(){
@@ -890,7 +902,7 @@ function saveClient(){
     const conflicts=checkConflicts(c.fname+' '+c.lname,'');
     if(conflicts.length){
       c.notes=(c.notes?c.notes+' | ':'')+'[CONFLICT FLAGGED: '+new Date().toLocaleDateString('en-AU')+']';
-      showConflictModal(conflicts,'The name "'+c.fname+' '+c.lname+'" matches the following existing client records:',doSave);
+      showConflictModal(conflicts,'The name "'+c.fname+' '+c.lname+'" matches the following existing client records:','m-client',doSave);
       return;
     }
   }
@@ -932,7 +944,7 @@ function saveMatter(){
     const conflicts=checkConflicts(clientName2,m.desc);
     if(conflicts.length){
       m.notes=(m.notes?m.notes+' | ':'')+'[CONFLICT FLAGGED: '+new Date().toLocaleDateString('en-AU')+']';
-      showConflictModal(conflicts,'This matter may conflict with the following existing client records:',doSave);
+      showConflictModal(conflicts,'This matter may conflict with the following existing client records:','m-matter',doSave);
       return;
     }
   }
