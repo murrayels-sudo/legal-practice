@@ -670,6 +670,26 @@ tbody tr:hover td{background:#fafaf8}
   </div>
 </div>
 
+<!-- CONFLICT MODAL -->
+<div class="modal-overlay" id="m-conflict">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header" style="background:#854F0B;border-radius:12px 12px 0 0">
+      <h3 style="color:#fff">⚠ Potential Conflict of Interest</h3>
+    </div>
+    <div style="padding:20px">
+      <p style="font-size:13px;color:var(--text2);margin-bottom:14px" id="conflict-modal-msg"></p>
+      <div class="card" style="margin-bottom:16px">
+        <div id="conflict-modal-list"></div>
+      </div>
+      <p style="font-size:12px;color:var(--text3)">Do you wish to proceed and save this record, or cancel and review?</p>
+    </div>
+    <div class="form-actions">
+      <button class="btn" onclick="conflictDecision(false)">✕ Cancel — do not save</button>
+      <button class="btn btn-primary" onclick="conflictDecision(true)">✓ Proceed and save</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════════
 // AUTH
@@ -841,22 +861,40 @@ function filterMattersForClient(clientSelectId,matterSelectId){
 // ═══════════════════════════════════════════════
 // CLIENTS
 // ═══════════════════════════════════════════════
+// Pending save state for conflict modal
+let _pendingSave=null;
+
+function conflictDecision(proceed){
+  closeModal('m-conflict');
+  if(proceed&&_pendingSave){_pendingSave();_pendingSave=null;}
+  else{_pendingSave=null;}
+}
+
+function showConflictModal(conflicts,msg,onProceed){
+  document.getElementById('conflict-modal-msg').textContent=msg;
+  document.getElementById('conflict-modal-list').innerHTML=conflicts.map(r=>`<div class="acct-row"><span style="font-size:13px;color:var(--amber)">⚠</span> <span style="font-size:13px">${r}</span></div>`).join('');
+  _pendingSave=onProceed;
+  document.getElementById('m-conflict').classList.add('open');
+}
+
 function saveClient(){
   const eid=v('c-id');
   const c={id:eid||uid(),fname:v('c-fname'),lname:v('c-lname'),phone:v('c-phone'),email:v('c-email'),address:v('c-address'),dob:v('c-dob'),status:v('c-status'),notes:v('c-notes')};
   if(!c.fname||!c.lname){alert('First and last name are required.');return;}
-  // Conflict of interest check on new clients only
+  const doSave=()=>{
+    if(eid){const i=db.clients.findIndex(x=>x.id===eid);if(i>-1)db.clients[i]=c;}
+    else db.clients.push(c);
+    save();closeModal('m-client');clearForm(['c-fname','c-lname','c-phone','c-email','c-address','c-dob','c-notes']);renderClients();
+  };
   if(!eid){
     const conflicts=checkConflicts(c.fname+' '+c.lname,'');
     if(conflicts.length){
-      const msg='⚠ POTENTIAL CONFLICT OF INTEREST\n\nThe name "'+c.fname+' '+c.lname+'" matches the following existing records:\n\n'+conflicts.join('\n')+'\n\nDo you still want to save this client?';
-      if(!confirm(msg))return;
-      c.notes=(c.notes?c.notes+'\n\n':'')+'[CONFLICT CHECK: Potential conflict flagged at creation — '+new Date().toLocaleDateString('en-AU')+']';
+      c.notes=(c.notes?c.notes+' | ':'')+'[CONFLICT FLAGGED: '+new Date().toLocaleDateString('en-AU')+']';
+      showConflictModal(conflicts,'The name "'+c.fname+' '+c.lname+'" matches the following existing client records:',doSave);
+      return;
     }
   }
-  if(eid){const i=db.clients.findIndex(x=>x.id===eid);if(i>-1)db.clients[i]=c;}
-  else db.clients.push(c);
-  save();closeModal('m-client');clearForm(['c-fname','c-lname','c-phone','c-email','c-address','c-dob','c-notes']);renderClients();
+  doSave();
 }
 function editClient(id){
   const c=db.clients.find(x=>x.id===id);if(!c)return;
@@ -883,20 +921,22 @@ function saveMatter(){
   const m={id:eid||uid(),ref:v('mat-ref'),client:v('mat-client'),desc:v('mat-desc'),type:v('mat-type'),status:v('mat-status'),opened:v('mat-opened')||today(),rate:parseFloat(v('mat-rate'))||settings.rate,folder:v('mat-folder'),notes:v('mat-notes')};
   if(!m.desc||!m.client){alert('Client and description are required.');return;}
   if(!m.ref)m.ref='ME-'+new Date().getFullYear()+'-'+String(db.matters.length+1).padStart(3,'0');
-  // Conflict of interest check on new matters only
+  const doSave=()=>{
+    if(eid){const i=db.matters.findIndex(x=>x.id===eid);if(i>-1)db.matters[i]=m;}
+    else db.matters.push(m);
+    save();closeModal('m-matter');renderMatters();
+  };
   if(!eid){
     const thisClient=db.clients.find(x=>x.id===m.client);
     const clientName2=thisClient?thisClient.fname+' '+thisClient.lname:'';
     const conflicts=checkConflicts(clientName2,m.desc);
     if(conflicts.length){
-      const msg='⚠ POTENTIAL CONFLICT OF INTEREST\n\nThis matter may conflict with existing records:\n\n'+conflicts.join('\n')+'\n\nDo you still want to save this matter?';
-      if(!confirm(msg))return;
-      m.notes=(m.notes?m.notes+'\n\n':'')+'[CONFLICT CHECK: Potential conflict flagged at creation — '+new Date().toLocaleDateString('en-AU')+']';
+      m.notes=(m.notes?m.notes+' | ':'')+'[CONFLICT FLAGGED: '+new Date().toLocaleDateString('en-AU')+']';
+      showConflictModal(conflicts,'This matter may conflict with the following existing client records:',doSave);
+      return;
     }
   }
-  if(eid){const i=db.matters.findIndex(x=>x.id===eid);if(i>-1)db.matters[i]=m;}
-  else db.matters.push(m);
-  save();closeModal('m-matter');renderMatters();
+  doSave();
 }
 function editMatter(id){
   const m=db.matters.find(x=>x.id===id);if(!m)return;
@@ -1414,10 +1454,14 @@ function runManualConflictCheck(){
   const results=checkConflicts(name,desc);
   const out=document.getElementById('conflict-results');
   if(!results.length){
-    out.innerHTML='<div class="alert alert-green" style="margin-top:16px">✓ No conflicts found for "'+name+(desc?' / '+desc:'')+'"</div>';
+    out.innerHTML='<div class="alert alert-green" style="margin-top:16px">✓ No conflicts found for "'+name+(desc?' / '+desc:'')+'". Safe to proceed.</div>';
   } else {
-    out.innerHTML='<div class="alert alert-amber" style="margin-top:16px">⚠ '+results.length+' potential conflict'+(results.length>1?'s':'')+' found:</div>'+
-    '<div class="card" style="margin-top:12px">'+results.map((r,i)=>`<div class="acct-row"><span style="font-size:13px">${r}</span></div>`).join('')+'</div>';
+    out.innerHTML=
+      '<div class="alert alert-amber" style="margin-top:16px">⚠ '+results.length+' potential conflict'+(results.length>1?'s':'')+' found for "'+name+'":</div>'+
+      '<div class="card" style="margin-top:12px">'+results.map(r=>`<div class="acct-row"><span style="font-size:13px;color:var(--amber)">⚠</span> <span style="font-size:13px">${r}</span></div>`).join('')+'</div>'+
+      '<div style="margin-top:14px;padding:12px 16px;background:var(--surface2);border-radius:var(--radius);font-size:13px;color:var(--text2)">'+
+      'Review the above conflicts carefully before deciding whether to act for this client. '+
+      'If you proceed, record your conflict waiver decision in your file notes.</div>';
   }
 }
 
