@@ -873,31 +873,38 @@ function checkConflicts(nameToCheck, descToCheck){
   const results = [];
   const nameLower = (nameToCheck||'').toLowerCase().trim();
   const descLower = (descToCheck||'').toLowerCase().trim();
-  const nameParts = nameLower.split(' ').filter(p=>p.length>2);
+  const seenClients = [];
 
+  // Only match if the full search term appears in the client name
   db.clients.forEach(c=>{
     const fullName = (c.fname+' '+c.lname).toLowerCase();
-    const nameMatch = nameParts.length && nameParts.some(part=>fullName.includes(part) && part.length>2);
-    if(nameMatch && fullName !== nameLower){
-      const matters = db.matters.filter(m=>m.client===c.id);
-      results.push('Client: '+c.fname+' '+c.lname+(matters.length?' — matters: '+matters.map(m=>m.ref).join(', '):''));
+    // Must be a substring match of the whole search term, not word-by-word
+    if(nameLower.length>2 && fullName.includes(nameLower) && fullName !== nameLower){
+      if(!seenClients.includes(c.id)){
+        seenClients.push(c.id);
+        const matters = db.matters.filter(m=>m.client===c.id);
+        results.push('Client: '+c.fname+' '+c.lname+(matters.length?' — matters: '+matters.map(m=>m.ref).join(', '):''));
+      }
     }
   });
 
+  // Check matter descriptions for keyword overlap
   if(descLower && descLower.length>4){
     const skip=['legal','matter','services','client','court','with','about','from','that','this','have'];
     const descWords = descLower.split(' ').filter(w=>w.length>4 && !skip.includes(w));
-    db.matters.forEach(m=>{
-      const mDescLower = (m.desc||'').toLowerCase();
-      const hits = descWords.filter(w=>mDescLower.includes(w));
-      if(hits.length>=2){
-        const mc = db.clients.find(x=>x.id===m.client);
-        const mcName = mc ? mc.fname+' '+mc.lname : 'Unknown';
-        if(mcName.toLowerCase() !== nameLower){
-          results.push('Matter: '+m.ref+' ('+mcName+') — '+m.desc);
+    if(descWords.length>=2){
+      db.matters.forEach(m=>{
+        const mDescLower = (m.desc||'').toLowerCase();
+        const hits = descWords.filter(w=>mDescLower.includes(w));
+        if(hits.length>=2){
+          const mc = db.clients.find(x=>x.id===m.client);
+          const mcName = mc ? mc.fname+' '+mc.lname : 'Unknown';
+          if(mcName.toLowerCase() !== nameLower){
+            results.push('Matter: '+m.ref+' ('+mcName+') — '+m.desc);
+          }
         }
-      }
-    });
+      });
+    }
   }
   return results;
 }
