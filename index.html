@@ -1479,7 +1479,7 @@ function checkConflicts(nameToCheck, descToCheck){
 
   // Check matter descriptions for keyword overlap
   if(descLower&&descLower.length>4){
-    const descWords=descLower.split(/\s+/).filter(w=>w.length>4&&!['legal','matter','services','client','court'].includes(w));
+    const descWords=descLower.split(' ').filter(w=>w.length>4&&!['legal','matter','services','client','court'].includes(w));
     db.matters.forEach(m=>{
       const mDescLower=(m.desc||'').toLowerCase();
       const matchingWords=descWords.filter(w=>mDescLower.includes(w));
