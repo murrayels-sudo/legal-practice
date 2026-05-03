@@ -278,6 +278,10 @@ tbody tr:hover td{background:#fafaf8}
         Accounts
       </a>
       <div class="nav-section-label">System</div>
+      <a class="nav-item" onclick="showPage('conflicts')" href="#">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 11v.5"/></svg>
+        Conflict Check
+      </a>
       <a class="nav-item" onclick="showPage('settings')" href="#">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41"/></svg>
         Settings
@@ -395,6 +399,7 @@ tbody tr:hover td{background:#fafaf8}
             <select id="stmt-client" class="search-input" style="width:200px"><option value="">— Statement for client —</option></select>
             <select id="stmt-matter" class="search-input" style="width:200px"><option value="">All matters</option></select>
             <button class="btn btn-gold" onclick="printStatement()">🖨 Print Statement</button>
+            <button class="btn" style="background:#2d7a3a;color:#fff;border-color:#2d7a3a" onclick="emailStatement()">✉ Email Statement</button>
             <button class="btn btn-primary" onclick="openModal('m-invoice')">+ New invoice</button>
           </div>
         </div>
@@ -438,6 +443,34 @@ tbody tr:hover td{background:#fafaf8}
               <div id="acc-exp-total"></div>
             </div>
             <div class="profit-box" id="acc-profit"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CONFLICT CHECKER -->
+      <div class="page content" id="page-conflicts">
+        <div class="card accent" style="max-width:620px">
+          <div class="card-header"><h3>Manual conflict of interest search</h3></div>
+          <div style="padding:20px">
+            <p style="font-size:13px;color:var(--text2);margin-bottom:16px">Enter a prospective client name and/or matter description to check against all existing clients and matters. Conflicts are also checked automatically when you save a new client or matter.</p>
+            <div class="form-row">
+              <div class="fgroup"><label>Name to check</label><input id="conflict-name" placeholder="e.g. John Smith"></div>
+              <div class="fgroup"><label>Matter description (optional)</label><input id="conflict-desc" placeholder="e.g. property dispute conveyancing"></div>
+            </div>
+            <button class="btn btn-primary" onclick="runManualConflictCheck()">Run conflict check</button>
+            <div id="conflict-results"></div>
+          </div>
+        </div>
+        <div class="card accent" style="max-width:620px;margin-top:20px">
+          <div class="card-header"><h3>How conflict checking works</h3></div>
+          <div style="padding:16px 20px;font-size:13px;color:var(--text2);line-height:1.8">
+            <p>The system automatically checks for conflicts when you:</p>
+            <ul style="margin:8px 0 8px 20px">
+              <li>Save a <strong>new client</strong> — checks name against all existing clients</li>
+              <li>Save a <strong>new matter</strong> — checks client name and matter description against existing records</li>
+            </ul>
+            <p>If a potential conflict is found, you will be shown a warning and can choose to proceed or cancel. A note is automatically added to the client or matter record.</p>
+            <p style="margin-top:8px">Use the <strong>manual search</strong> above to check a prospective client before adding them to the system.</p>
           </div>
         </div>
       </div>
@@ -736,14 +769,14 @@ function clearAllData(){
 // ═══════════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════════
-const pageTitles={dashboard:'Dashboard',clients:'Clients',matters:'Matters',appointments:'Appointments',documents:'Documents',activity:'Activity Log',invoices:'Invoices',expenses:'Expenses',accounts:'Accounts summary',settings:'Settings'};
+const pageTitles={dashboard:'Dashboard',clients:'Clients',matters:'Matters',appointments:'Appointments',documents:'Documents',activity:'Activity Log',invoices:'Invoices',expenses:'Expenses',accounts:'Accounts summary',conflicts:'Conflict of Interest',settings:'Settings'};
 function showPage(name){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('page-'+name).classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n=>{if(n.getAttribute('onclick')&&n.getAttribute('onclick').includes("'"+name+"'"))n.classList.add('active');});
   document.getElementById('page-title').textContent=pageTitles[name]||name;
-  const renders={dashboard:renderDashboard,clients:renderClients,matters:renderMatters,appointments:renderAppts,documents:renderDocs,activity:renderActivity,invoices:renderInvoices,expenses:renderExpenses,accounts:renderAccounts};
+  const renders={dashboard:renderDashboard,clients:renderClients,matters:renderMatters,appointments:renderAppts,documents:renderDocs,activity:renderActivity,invoices:renderInvoices,expenses:renderExpenses,accounts:renderAccounts,conflicts:function(){document.getElementById('conflict-results').innerHTML=''}};
   if(renders[name])renders[name]();
   if(name==='settings'){
     document.getElementById('set-firm').value=settings.firm;
@@ -812,6 +845,15 @@ function saveClient(){
   const eid=v('c-id');
   const c={id:eid||uid(),fname:v('c-fname'),lname:v('c-lname'),phone:v('c-phone'),email:v('c-email'),address:v('c-address'),dob:v('c-dob'),status:v('c-status'),notes:v('c-notes')};
   if(!c.fname||!c.lname){alert('First and last name are required.');return;}
+  // Conflict of interest check on new clients only
+  if(!eid){
+    const conflicts=checkConflicts(c.fname+' '+c.lname,'');
+    if(conflicts.length){
+      const msg='⚠ POTENTIAL CONFLICT OF INTEREST\n\nThe name "'+c.fname+' '+c.lname+'" matches the following existing records:\n\n'+conflicts.join('\n')+'\n\nDo you still want to save this client?';
+      if(!confirm(msg))return;
+      c.notes=(c.notes?c.notes+'\n\n':'')+'[CONFLICT CHECK: Potential conflict flagged at creation — '+new Date().toLocaleDateString('en-AU')+']';
+    }
+  }
   if(eid){const i=db.clients.findIndex(x=>x.id===eid);if(i>-1)db.clients[i]=c;}
   else db.clients.push(c);
   save();closeModal('m-client');clearForm(['c-fname','c-lname','c-phone','c-email','c-address','c-dob','c-notes']);renderClients();
@@ -841,6 +883,17 @@ function saveMatter(){
   const m={id:eid||uid(),ref:v('mat-ref'),client:v('mat-client'),desc:v('mat-desc'),type:v('mat-type'),status:v('mat-status'),opened:v('mat-opened')||today(),rate:parseFloat(v('mat-rate'))||settings.rate,folder:v('mat-folder'),notes:v('mat-notes')};
   if(!m.desc||!m.client){alert('Client and description are required.');return;}
   if(!m.ref)m.ref='ME-'+new Date().getFullYear()+'-'+String(db.matters.length+1).padStart(3,'0');
+  // Conflict of interest check on new matters only
+  if(!eid){
+    const thisClient=db.clients.find(x=>x.id===m.client);
+    const clientName2=thisClient?thisClient.fname+' '+thisClient.lname:'';
+    const conflicts=checkConflicts(clientName2,m.desc);
+    if(conflicts.length){
+      const msg='⚠ POTENTIAL CONFLICT OF INTEREST\n\nThis matter may conflict with existing records:\n\n'+conflicts.join('\n')+'\n\nDo you still want to save this matter?';
+      if(!confirm(msg))return;
+      m.notes=(m.notes?m.notes+'\n\n':'')+'[CONFLICT CHECK: Potential conflict flagged at creation — '+new Date().toLocaleDateString('en-AU')+']';
+    }
+  }
   if(eid){const i=db.matters.findIndex(x=>x.id===eid);if(i>-1)db.matters[i]=m;}
   else db.matters.push(m);
   save();closeModal('m-matter');renderMatters();
@@ -962,7 +1015,7 @@ function renderInvoices(){
   const rows=db.invoices.filter(i=>(i.num+clientName(i.client)+i.status).toLowerCase().includes(q));
   const tb=document.getElementById('t-invoices');
   if(!rows.length){tb.innerHTML=`<tr><td colspan="10" class="empty-msg">No invoices yet.</td></tr>`;return;}
-  tb.innerHTML=rows.map(i=>`<tr><td><strong>${i.num}</strong></td><td>${clientName(i.client)}</td><td>${i.matter?matterRef(i.matter):'—'}</td><td>${fmtDate(i.date)}</td><td>${fmtDate(i.due)}</td><td>${fmtMoney(i.amount)}</td><td>${fmtMoney(i.gst)}</td><td><strong>${fmtMoney(i.total)}</strong></td><td>${badge(i.status)}</td><td style="white-space:nowrap">${i.status!=='Paid'?`<button class="btn btn-sm btn-gold" onclick="markPaid('${i.id}')">Paid</button> `:''}<button class="btn btn-sm" onclick="editInvoice('${i.id}')">Edit</button> <button class="btn btn-sm btn-primary" onclick="printInvoice('${i.id}')">🖨 Print</button> <button class="btn-danger" onclick="delRow('invoices','${i.id}',renderInvoices)">×</button></td></tr>`).join('');
+  tb.innerHTML=rows.map(i=>`<tr><td><strong>${i.num}</strong></td><td>${clientName(i.client)}</td><td>${i.matter?matterRef(i.matter):'—'}</td><td>${fmtDate(i.date)}</td><td>${fmtDate(i.due)}</td><td>${fmtMoney(i.amount)}</td><td>${fmtMoney(i.gst)}</td><td><strong>${fmtMoney(i.total)}</strong></td><td>${badge(i.status)}</td><td style="white-space:nowrap">${i.status!=='Paid'?`<button class="btn btn-sm btn-gold" onclick="markPaid('${i.id}')">Paid</button> `:''}<button class="btn btn-sm" onclick="editInvoice('${i.id}')">Edit</button> <button class="btn btn-sm btn-primary" onclick="printInvoice('${i.id}')">🖨 Print</button> <button class="btn btn-sm" style="background:#2d7a3a;color:#fff;border-color:#2d7a3a" onclick="emailInvoice('${i.id}')">✉ Email</button> <button class="btn-danger" onclick="delRow('invoices','${i.id}',renderInvoices)">×</button></td></tr>`).join('');
 }
 
 // ═══════════════════════════════════════════════
@@ -1210,6 +1263,258 @@ function createInvoiceFromActivity(matterId){
   renderActivity();
   showPage('invoices');
 }
+
+// ═══════════════════════════════════════════════
+// EMAIL INVOICE
+// ═══════════════════════════════════════════════
+function emailInvoice(invId){
+  const inv=db.invoices.find(x=>x.id===invId);
+  if(!inv){alert('Invoice not found.');return;}
+  const client=db.clients.find(x=>x.id===inv.client)||{};
+  const matter=db.matters.find(x=>x.id===inv.matter)||{};
+  const clientEmail=client.email||'';
+  const clientFullName=client.fname?client.fname+' '+client.lname:'Client';
+
+  if(!clientEmail){
+    alert('This client does not have an email address saved.\nPlease add their email in the Clients section first.');
+    return;
+  }
+
+  const subject=encodeURIComponent('Invoice '+inv.num+' — Murray Edwards Legal Services');
+
+  const body=encodeURIComponent(
+'Dear '+clientFullName+',
+
+'+
+'Please find below details of Invoice '+inv.num+' from Murray Edwards Legal Services.
+
+'+
+'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+'+
+'INVOICE DETAILS
+'+
+'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+'+
+'Invoice No:       '+inv.num+'
+'+
+'Date:             '+fmtDate(inv.date)+'
+'+
+'Due Date:         '+fmtDate(inv.due)+'
+'+
+(matter.ref?'Matter:           '+matter.ref+(matter.desc?' — '+matter.desc:'')+'
+':'')+
+'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+'+
+'Amount (excl GST): '+fmtMoney(inv.amount)+'
+'+
+'GST (10%):         '+fmtMoney(inv.gst)+'
+'+
+'TOTAL DUE:         '+fmtMoney(inv.total)+'
+'+
+'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+'+
+(inv.desc?'Description:
+'+inv.desc+'
+
+':'')+
+'Payment Details:
+'+
+'Account Name: Murray Edwards Legal Services
+'+
+'BSB: [000-000]
+'+
+'Account No: [000 000 000]
+'+
+'Please reference '+inv.num+' when making payment.
+
+'+
+'Payment is due by '+fmtDate(inv.due)+'. If you have any questions please do not hesitate to contact me.
+
+'+
+'Kind regards,
+
+'+
+(settings.name||'Murray Edwards')+'
+'+
+(settings.firm||'Murray Edwards Legal Services')+'
+'+
+(settings.phone||'0411 590 065')+'
+'+
+(settings.email||'murrayels@gmail.com')+'
+'+
+'ABN '+(settings.abn||'22 318 545 945')
+  );
+
+  window.location.href='mailto:'+clientEmail+'?subject='+subject+'&body='+body;
+}
+
+// ═══════════════════════════════════════════════
+// EMAIL STATEMENT
+// ═══════════════════════════════════════════════
+function emailStatement(){
+  const cid=v('stmt-client');
+  const mid=v('stmt-matter');
+  if(!cid){alert('Please select a client from the dropdown first.');return;}
+
+  const client=db.clients.find(x=>x.id===cid)||{};
+  const clientFullName=client.fname?client.fname+' '+client.lname:'Client';
+  const clientEmail=client.email||'';
+
+  if(!clientEmail){
+    alert('This client does not have an email address saved.\nPlease add their email in the Clients section first.');
+    return;
+  }
+
+  // Filter invoices
+  let invs=db.invoices.filter(i=>i.client===cid);
+  if(mid)invs=invs.filter(i=>i.matter===mid);
+  invs=invs.slice().sort((a,b)=>a.date.localeCompare(b.date));
+
+  if(!invs.length){alert('No invoices found for this client'+(mid?' and matter':'')+'.');return;}
+
+  const matterLabel=mid?(()=>{const m=db.matters.find(x=>x.id===mid);return m?m.ref+(m.desc?' — '+m.desc:''):'Selected matter';})():'All matters';
+  const totalAmt=invs.reduce((s,i)=>s+i.total,0);
+  const totalPaid=invs.filter(i=>i.status==='Paid').reduce((s,i)=>s+i.total,0);
+  const totalOut=totalAmt-totalPaid;
+
+  // Build invoice lines
+  const lines=invs.map(i=>
+    i.num.padEnd(12)+fmtDate(i.date).padEnd(14)+fmtMoney(i.total).padEnd(14)+i.status
+  ).join('\n');
+
+  const subject=encodeURIComponent('Statement of Account — Murray Edwards Legal Services');
+
+  const body=encodeURIComponent(
+'Dear '+clientFullName+',
+
+'+
+'Please find below your statement of account from Murray Edwards Legal Services.
+
+'+
+'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+'+
+'STATEMENT OF ACCOUNT
+'+
+'As at '+new Date().toLocaleDateString('en-AU',{day:'2-digit',month:'long',year:'numeric'})+'
+'+
+'Matter: '+matterLabel+'
+'+
+'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+'+
+'Invoice     Date          Amount        Status
+'+
+'─────────────────────────────────────────────
+'+
+lines+'
+'+
+'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+'+
+'Total invoiced:    '+fmtMoney(totalAmt)+'
+'+
+'Total paid:        '+fmtMoney(totalPaid)+'
+'+
+'Balance owing:     '+fmtMoney(totalOut)+'
+'+
+'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+'+
+(totalOut>0?
+'Payment Details:
+'+
+'Account Name: Murray Edwards Legal Services
+'+
+'BSB: [000-000]
+'+
+'Account No: [000 000 000]
+'+
+'Please reference your invoice number(s) when making payment.
+
+'
+:'Your account is fully paid — thank you!
+
+')+
+'If you have any queries regarding this statement please do not hesitate to contact me.
+
+'+
+'Kind regards,
+
+'+
+(settings.name||'Murray Edwards')+'
+'+
+(settings.firm||'Murray Edwards Legal Services')+'
+'+
+(settings.phone||'0411 590 065')+'
+'+
+(settings.email||'murrayels@gmail.com')+'
+'+
+'ABN '+(settings.abn||'22 318 545 945')
+  );
+
+  window.location.href='mailto:'+clientEmail+'?subject='+subject+'&body='+body;
+}
+
+
+// ═══════════════════════════════════════════════
+// CONFLICT OF INTEREST CHECKER
+// ═══════════════════════════════════════════════
+function checkConflicts(nameToCheck, descToCheck){
+  if(!nameToCheck&&!descToCheck)return[];
+  const results=[];
+  const nameLower=(nameToCheck||'').toLowerCase().trim();
+  const descLower=(descToCheck||'').toLowerCase().trim();
+
+  // Split name into parts for partial matching
+  const nameParts=nameLower.split(' ').filter(p=>p.length>2);
+
+  db.clients.forEach(c=>{
+    const fullName=(c.fname+' '+c.lname).toLowerCase();
+    // Check name match — any part of name matches
+    const nameMatch=nameParts.length&&nameParts.some(part=>fullName.includes(part)&&part.length>2);
+    if(nameMatch&&(c.fname+' '+c.lname).toLowerCase()!==nameLower){
+      const matters=db.matters.filter(m=>m.client===c.id);
+      results.push('CLIENT: '+c.fname+' '+c.lname+(c.status==='Inactive'?' [Inactive]':'')+(matters.length?' ('+matters.length+' matter'+(matters.length>1?'s':'')+': '+matters.map(m=>m.ref).join(', ')+')':''));
+    }
+  });
+
+  // Check matter descriptions for keyword overlap
+  if(descLower&&descLower.length>4){
+    const descWords=descLower.split(/\s+/).filter(w=>w.length>4&&!['legal','matter','services','client','court'].includes(w));
+    db.matters.forEach(m=>{
+      const mDescLower=(m.desc||'').toLowerCase();
+      const matchingWords=descWords.filter(w=>mDescLower.includes(w));
+      if(matchingWords.length>=2){
+        const mc=db.clients.find(x=>x.id===m.client);
+        const mcName=mc?mc.fname+' '+mc.lname:'Unknown';
+        // Don't flag the same client's own matters
+        const thisClientName=(nameToCheck||'').toLowerCase();
+        if(mcName.toLowerCase()!==thisClientName){
+          results.push('MATTER: '+m.ref+' ('+mcName+') — "'+m.desc+'"');
+        }
+      }
+    });
+  }
+
+  return results;
+}
+
+// ═══════════════════════════════════════════════
+// CONFLICT SEARCH PAGE (manual check)
+// ═══════════════════════════════════════════════
+function runManualConflictCheck(){
+  const name=document.getElementById('conflict-name').value.trim();
+  const desc=document.getElementById('conflict-desc').value.trim();
+  if(!name&&!desc){alert('Please enter a name or description to check.');return;}
+  const results=checkConflicts(name,desc);
+  const out=document.getElementById('conflict-results');
+  if(!results.length){
+    out.innerHTML='<div class="alert alert-green" style="margin-top:16px">✓ No conflicts found for "'+name+(desc?' / '+desc:'')+'"</div>';
+  } else {
+    out.innerHTML='<div class="alert alert-amber" style="margin-top:16px">⚠ '+results.length+' potential conflict'+(results.length>1?'s':'')+' found:</div>'+
+    '<div class="card" style="margin-top:12px">'+results.map((r,i)=>`<div class="acct-row"><span style="font-size:13px">${r}</span></div>`).join('')+'</div>';
+  }
+}
+
 
 // ═══════════════════════════════════════════════
 // PRINT STATEMENT
