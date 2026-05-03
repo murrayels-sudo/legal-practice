@@ -866,8 +866,6 @@ function filterMattersForClient(clientSelectId,matterSelectId){
 // ═══════════════════════════════════════════════
 // CONFLICT OF INTEREST
 // ═══════════════════════════════════════════════
-let _conflictConfirmed = false;
-
 function checkConflicts(nameToCheck, descToCheck){
   if(!nameToCheck && !descToCheck) return [];
   const results = [];
@@ -913,42 +911,20 @@ function saveClient(){
   const eid = v('c-id');
   const c = {id:eid||uid(),fname:v('c-fname'),lname:v('c-lname'),phone:v('c-phone'),email:v('c-email'),address:v('c-address'),dob:v('c-dob'),status:v('c-status'),notes:v('c-notes')};
   if(!c.fname||!c.lname){alert('First and last name are required.');return;}
-
-  if(!eid && !_conflictConfirmed){
+  if(!eid){
     const conflicts = checkConflicts(c.fname+' '+c.lname,'');
     if(conflicts.length){
-      const warn = document.getElementById('client-conflict-warning');
-      warn.style.display='block';
-      warn.innerHTML = '<strong>⚠ Potential conflict of interest found:</strong><ul style="margin:8px 0 10px 16px">'+
-        conflicts.map(r=>'<li style="margin-bottom:4px">'+r+'</li>').join('')+
-        '</ul><div style="display:flex;gap:8px;margin-top:8px">'+
-        '<button class="btn btn-sm" style="background:#2d7a3a;color:#fff;border-color:#2d7a3a" onclick="confirmAndSaveClient()">✓ Proceed and save</button>'+
-        '<button class="btn btn-sm" onclick="dismissClientConflict()">✕ Cancel</button></div>';
-      return;
+      const msg = 'POTENTIAL CONFLICT OF INTEREST\n\n'+conflicts.join('\n')+'\n\nDo you still want to save this client?';
+      if(!window.confirm(msg)) return;
+      c.notes = (c.notes?c.notes+' | ':'')+'[CONFLICT FLAGGED: '+new Date().toLocaleDateString('en-AU')+']';
     }
   }
-
-  _conflictConfirmed = false;
   if(eid){const i=db.clients.findIndex(x=>x.id===eid);if(i>-1)db.clients[i]=c;}
-  else{
-    c.notes=(c.notes?c.notes+' | ':'')+(document.getElementById('client-conflict-warning').style.display!=='none'?'[CONFLICT FLAGGED: '+new Date().toLocaleDateString('en-AU')+'] ':'');
-    db.clients.push(c);
-  }
+  else db.clients.push(c);
   save();
   closeModal('m-client');
   clearForm(['c-fname','c-lname','c-phone','c-email','c-address','c-dob','c-notes']);
-  document.getElementById('client-conflict-warning').style.display='none';
   renderClients();
-}
-
-function confirmAndSaveClient(){
-  _conflictConfirmed = true;
-  saveClient();
-}
-
-function dismissClientConflict(){
-  document.getElementById('client-conflict-warning').style.display='none';
-  _conflictConfirmed = false;
 }
 
 function saveMatter(){
@@ -956,45 +932,21 @@ function saveMatter(){
   const m = {id:eid||uid(),ref:v('mat-ref'),client:v('mat-client'),desc:v('mat-desc'),type:v('mat-type'),status:v('mat-status'),opened:v('mat-opened')||today(),rate:parseFloat(v('mat-rate'))||settings.rate,folder:v('mat-folder'),notes:v('mat-notes')};
   if(!m.desc||!m.client){alert('Client and description are required.');return;}
   if(!m.ref) m.ref='ME-'+new Date().getFullYear()+'-'+String(db.matters.length+1).padStart(3,'0');
-
-  if(!eid && !_conflictConfirmed){
+  if(!eid){
     const thisClient = db.clients.find(x=>x.id===m.client);
     const cName = thisClient ? thisClient.fname+' '+thisClient.lname : '';
     const conflicts = checkConflicts(cName, m.desc);
     if(conflicts.length){
-      const warn = document.getElementById('matter-conflict-warning');
-      warn.style.display='block';
-      warn.innerHTML = '<strong>⚠ Potential conflict of interest found:</strong><ul style="margin:8px 0 10px 16px">'+
-        conflicts.map(r=>'<li style="margin-bottom:4px">'+r+'</li>').join('')+
-        '</ul><div style="display:flex;gap:8px;margin-top:8px">'+
-        '<button class="btn btn-sm" style="background:#2d7a3a;color:#fff;border-color:#2d7a3a" onclick="confirmAndSaveMatter()">✓ Proceed and save</button>'+
-        '<button class="btn btn-sm" onclick="dismissMatterConflict()">✕ Cancel</button></div>';
-      return;
+      const msg = 'POTENTIAL CONFLICT OF INTEREST\n\n'+conflicts.join('\n')+'\n\nDo you still want to save this matter?';
+      if(!window.confirm(msg)) return;
+      m.notes = (m.notes?m.notes+' | ':'')+'[CONFLICT FLAGGED: '+new Date().toLocaleDateString('en-AU')+']';
     }
   }
-
-  _conflictConfirmed = false;
   if(eid){const i=db.matters.findIndex(x=>x.id===eid);if(i>-1)db.matters[i]=m;}
-  else{
-    if(document.getElementById('matter-conflict-warning').style.display!=='none'){
-      m.notes=(m.notes?m.notes+' | ':'')+'[CONFLICT FLAGGED: '+new Date().toLocaleDateString('en-AU')+']';
-    }
-    db.matters.push(m);
-  }
+  else db.matters.push(m);
   save();
   closeModal('m-matter');
-  document.getElementById('matter-conflict-warning').style.display='none';
   renderMatters();
-}
-
-function confirmAndSaveMatter(){
-  _conflictConfirmed = true;
-  saveMatter();
-}
-
-function dismissMatterConflict(){
-  document.getElementById('matter-conflict-warning').style.display='none';
-  _conflictConfirmed = false;
 }
 
 // ═══════════════════════════════════════════════
