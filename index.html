@@ -990,6 +990,340 @@ function dismissMatterConflict(){
   _conflictConfirmed = false;
 }
 
+// ═══════════════════════════════════════════════
+// CLIENTS
+// ═══════════════════════════════════════════════
+function editClient(id){
+  const c=db.clients.find(x=>x.id===id);if(!c)return;
+  document.getElementById('m-client-title').textContent='Edit client';
+  openModal('m-client',id);
+  setFields({id:'c-id',fname:'c-fname',lname:'c-lname',phone:'c-phone',email:'c-email',address:'c-address',dob:'c-dob',status:'c-status',notes:'c-notes'},c);
+}
+function renderClients(){
+  const q=(v('s-clients')||'').toLowerCase();
+  const rows=db.clients.filter(c=>(c.fname+' '+c.lname+c.email+c.phone).toLowerCase().includes(q));
+  const tb=document.getElementById('t-clients');
+  if(!rows.length){tb.innerHTML=`<tr><td colspan="7" class="empty-msg">No clients yet. Click "+ New client" to add one.</td></tr>`;return;}
+  tb.innerHTML=rows.map(c=>{
+    const mc=db.matters.filter(m=>m.client===c.id).length;
+    return`<tr><td><strong>${c.fname} ${c.lname}</strong></td><td>${c.phone||'—'}</td><td>${c.email||'—'}</td><td>${c.address||'—'}</td><td>${mc}</td><td>${badge(c.status)}</td><td style="white-space:nowrap"><button class="btn btn-sm" onclick="editClient('${c.id}')">Edit</button> <button class="btn-danger" onclick="delRow('clients','${c.id}',renderClients)">×</button></td></tr>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════
+// MATTERS
+// ═══════════════════════════════════════════════
+function editMatter(id){
+  const m=db.matters.find(x=>x.id===id);if(!m)return;
+  document.getElementById('m-matter-title').textContent='Edit matter';
+  openModal('m-matter',id);
+  populateClientSelects();
+  setFields({id:'mat-id',ref:'mat-ref',client:'mat-client',desc:'mat-desc',type:'mat-type',status:'mat-status',opened:'mat-opened',rate:'mat-rate',folder:'mat-folder',notes:'mat-notes'},m);
+}
+function renderMatters(){
+  const q=(v('s-matters')||'').toLowerCase();
+  const rows=db.matters.filter(m=>(m.ref+m.desc+clientName(m.client)+m.type).toLowerCase().includes(q));
+  const tb=document.getElementById('t-matters');
+  if(!rows.length){tb.innerHTML=`<tr><td colspan="8" class="empty-msg">No matters yet.</td></tr>`;return;}
+  tb.innerHTML=rows.map(m=>`<tr><td><strong>${m.ref}</strong></td><td>${clientName(m.client)}</td><td>${m.desc}</td><td>${m.type}</td><td>${fmtMoney(m.rate)}</td><td>${badge(m.status)}</td><td>${fmtDate(m.opened)}</td><td>${m.folder?`<a href="${m.folder}" target="_blank" class="btn btn-sm" title="Open folder">📁 Open</a>`:'—'}</td><td style="white-space:nowrap"><button class="btn btn-sm" onclick="editMatter('${m.id}')">Edit</button> <button class="btn-danger" onclick="delRow('matters','${m.id}',renderMatters)">×</button></td></tr>`).join('');
+}
+
+// ═══════════════════════════════════════════════
+// APPOINTMENTS
+// ═══════════════════════════════════════════════
+function saveAppt(){
+  const eid=v('appt-id');
+  const a={id:eid||uid(),date:v('appt-date'),time:v('appt-time'),client:v('appt-client'),matter:v('appt-matter'),type:v('appt-type'),duration:v('appt-dur'),notes:v('appt-notes')};
+  if(!a.date||!a.client){alert('Date and client are required.');return;}
+  if(eid){const i=db.appointments.findIndex(x=>x.id===eid);if(i>-1)db.appointments[i]=a;}
+  else db.appointments.push(a);
+  db.appointments.sort((a,b)=>a.date.localeCompare(b.date)||(a.time||'').localeCompare(b.time||''));
+  save();closeModal('m-appt');renderAppts();
+}
+function renderAppts(){
+  const q=(v('s-appts')||'').toLowerCase();
+  const t=today();
+  const rows=db.appointments.filter(a=>(clientName(a.client)+a.type+a.date).toLowerCase().includes(q));
+  const tb=document.getElementById('t-appts');
+  if(!rows.length){tb.innerHTML=`<tr><td colspan="8" class="empty-msg">No appointments yet.</td></tr>`;return;}
+  tb.innerHTML=rows.map(a=>`<tr><td>${fmtDate(a.date)}${a.date<t?' <span class="badge badge-gray" style="font-size:10px">past</span>':''}</td><td>${a.time||'—'}</td><td>${clientName(a.client)}</td><td>${a.matter?matterRef(a.matter):'—'}</td><td>${a.type}</td><td>${a.duration?a.duration+' min':'—'}</td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.notes||'—'}</td><td style="white-space:nowrap"><button class="btn-danger" onclick="delRow('appointments','${a.id}',renderAppts)">×</button></td></tr>`).join('');
+}
+
+// ═══════════════════════════════════════════════
+// DOCUMENTS
+// ═══════════════════════════════════════════════
+function saveDoc(){
+  const eid=v('doc-id');
+  const d={id:eid||uid(),name:v('doc-name'),client:v('doc-client'),matter:v('doc-matter'),type:v('doc-type'),format:v('doc-format'),date:v('doc-date')||today(),link:v('doc-link'),notes:v('doc-notes')};
+  if(!d.name){alert('Document name is required.');return;}
+  if(eid){const i=db.documents.findIndex(x=>x.id===eid);if(i>-1)db.documents[i]=d;}
+  else db.documents.push(d);
+  save();closeModal('m-doc');renderDocs();
+}
+function renderDocs(){
+  const q=(v('s-docs')||'').toLowerCase();
+  const typeF=v('s-docs-type')||'';
+  const rows=db.documents.filter(d=>(d.name+d.type+clientName(d.client)).toLowerCase().includes(q)&&(!typeF||d.type===typeF));
+  const tb=document.getElementById('t-docs');
+  if(!rows.length){tb.innerHTML=`<tr><td colspan="9" class="empty-msg">No document records yet.</td></tr>`;return;}
+  const fmtIcon={'Word (.docx)':'📝','PDF':'📄','Excel (.xlsx)':'📊','Email':'📧','Image':'🖼','Other':'📎'};
+  tb.innerHTML=rows.map(d=>`<tr>
+    <td><strong>${d.name}</strong></td>
+    <td>${clientName(d.client)}</td>
+    <td>${d.matter?matterRef(d.matter):'—'}</td>
+    <td>${d.type}</td>
+    <td>${d.format?(fmtIcon[d.format]||'📎')+' '+d.format:'—'}</td>
+    <td>${fmtDate(d.date)}</td>
+    <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.notes||'—'}</td>
+    <td>${d.link?`<a href="${d.link}" target="_blank" class="btn btn-sm btn-primary">Open ↗</a>`:'<span style="color:var(--text3);font-size:12px">No link</span>'}</td>
+    <td><button class="btn-danger" onclick="delRow('documents','${d.id}',renderDocs)">×</button></td>
+  </tr>`).join('');
+}
+
+// ═══════════════════════════════════════════════
+// INVOICES
+// ═══════════════════════════════════════════════
+function calcInvGST(){
+  const a=parseFloat(document.getElementById('inv-amount').value||0);
+  document.getElementById('inv-gst').value=(a*0.1).toFixed(2);
+  document.getElementById('inv-total').value=(a*1.1).toFixed(2);
+}
+function saveInvoice(){
+  const eid=v('inv-id');
+  const inv={id:eid||uid(),num:v('inv-num'),client:v('inv-client'),matter:v('inv-matter'),date:v('inv-date'),due:v('inv-due'),amount:parseFloat(v('inv-amount'))||0,gst:parseFloat(v('inv-gst'))||0,total:parseFloat(v('inv-total'))||0,status:v('inv-status'),desc:v('inv-desc')};
+  if(!inv.client||!inv.amount){alert('Client and amount are required.');return;}
+  if(eid){const i=db.invoices.findIndex(x=>x.id===eid);if(i>-1)db.invoices[i]=inv;}
+  else db.invoices.push(inv);
+  save();closeModal('m-invoice');renderInvoices();
+}
+function editInvoice(id){
+  const inv=db.invoices.find(x=>x.id===id);if(!inv)return;
+  openModal('m-invoice',id);
+  populateClientSelects();
+  setFields({id:'inv-id',num:'inv-num',client:'inv-client',matter:'inv-matter',date:'inv-date',due:'inv-due',status:'inv-status',desc:'inv-desc'},inv);
+  document.getElementById('inv-amount').value=inv.amount;
+  document.getElementById('inv-gst').value=inv.gst;
+  document.getElementById('inv-total').value=inv.total;
+  if(inv.client)filterMattersForClient('inv-client','inv-matter');
+  document.getElementById('inv-matter').value=inv.matter||'';
+}
+function markPaid(id){
+  const inv=db.invoices.find(x=>x.id===id);if(inv){inv.status='Paid';save();renderInvoices();renderDashboard();}
+}
+function renderInvoices(){
+  const sc=document.getElementById('stmt-client');
+  if(sc){
+    const curC=sc.value;
+    sc.innerHTML='<option value="">— Statement for client —</option>';
+    db.clients.forEach(c=>sc.innerHTML+=`<option value="${c.id}">${c.fname} ${c.lname}</option>`);
+    sc.value=curC;
+    sc.onchange=function(){
+      const sm=document.getElementById('stmt-matter');
+      if(!sm)return;
+      const cid=this.value;
+      sm.innerHTML='<option value="">All matters</option>';
+      db.matters.filter(m=>m.client===cid).forEach(m=>sm.innerHTML+=`<option value="${m.id}">${m.ref} — ${m.desc}</option>`);
+    };
+  }
+  const q=(v('s-invoices')||'').toLowerCase();
+  const rows=db.invoices.filter(i=>(i.num+clientName(i.client)+i.status).toLowerCase().includes(q));
+  const tb=document.getElementById('t-invoices');
+  if(!rows.length){tb.innerHTML=`<tr><td colspan="10" class="empty-msg">No invoices yet.</td></tr>`;return;}
+  tb.innerHTML=rows.map(i=>`<tr><td><strong>${i.num}</strong></td><td>${clientName(i.client)}</td><td>${i.matter?matterRef(i.matter):'—'}</td><td>${fmtDate(i.date)}</td><td>${fmtDate(i.due)}</td><td>${fmtMoney(i.amount)}</td><td>${fmtMoney(i.gst)}</td><td><strong>${fmtMoney(i.total)}</strong></td><td>${badge(i.status)}</td><td style="white-space:nowrap">${i.status!=='Paid'?`<button class="btn btn-sm btn-gold" onclick="markPaid('${i.id}')">Paid</button> `:''}<button class="btn btn-sm" onclick="editInvoice('${i.id}')">Edit</button> <button class="btn btn-sm btn-primary" onclick="printInvoice('${i.id}')">🖨 Print</button> <button class="btn btn-sm" style="background:#2d7a3a;color:#fff;border-color:#2d7a3a" onclick="emailInvoice('${i.id}')">✉ Email</button> <button class="btn-danger" onclick="delRow('invoices','${i.id}',renderInvoices)">×</button></td></tr>`).join('');
+}
+
+// ═══════════════════════════════════════════════
+// EXPENSES
+// ═══════════════════════════════════════════════
+function calcExpGST(){
+  const a=parseFloat(document.getElementById('exp-amount').value||0);
+  document.getElementById('exp-gst').value=(a*0.1).toFixed(2);
+  document.getElementById('exp-total').value=(a*1.1).toFixed(2);
+}
+function saveExpense(){
+  const eid=v('exp-id');
+  const e={id:eid||uid(),date:v('exp-date'),cat:v('exp-cat'),desc:v('exp-desc'),amount:parseFloat(v('exp-amount'))||0,gst:parseFloat(v('exp-gst'))||0,total:parseFloat(v('exp-total'))||0,receipt:v('exp-receipt')};
+  if(!e.desc||!e.amount){alert('Description and amount are required.');return;}
+  if(eid){const i=db.expenses.findIndex(x=>x.id===eid);if(i>-1)db.expenses[i]=e;}
+  else db.expenses.push(e);
+  save();closeModal('m-expense');renderExpenses();
+}
+function renderExpenses(){
+  const q=(v('s-expenses')||'').toLowerCase();
+  const rows=db.expenses.filter(e=>(e.desc+e.cat).toLowerCase().includes(q));
+  const tb=document.getElementById('t-expenses');
+  if(!rows.length){tb.innerHTML=`<tr><td colspan="8" class="empty-msg">No expenses yet.</td></tr>`;return;}
+  tb.innerHTML=rows.map(e=>`<tr><td>${fmtDate(e.date)}</td><td>${e.desc}</td><td>${e.cat}</td><td>${fmtMoney(e.amount)}</td><td>${fmtMoney(e.gst)}</td><td><strong>${fmtMoney(e.total)}</strong></td><td>${e.receipt||'—'}</td><td><button class="btn-danger" onclick="delRow('expenses','${e.id}',renderExpenses)">×</button></td></tr>`).join('');
+}
+
+// ═══════════════════════════════════════════════
+// ACCOUNTS
+// ═══════════════════════════════════════════════
+function renderAccounts(){
+  const totalInv=db.invoices.reduce((s,i)=>s+i.total,0);
+  const totalPaid=db.invoices.filter(i=>i.status==='Paid').reduce((s,i)=>s+i.total,0);
+  const totalOut=db.invoices.filter(i=>i.status!=='Paid').reduce((s,i)=>s+i.total,0);
+  const totalExp=db.expenses.reduce((s,e)=>s+e.total,0);
+  const profit=totalPaid-totalExp;
+  document.getElementById('acc-metrics').innerHTML=`
+    <div class="metric-card"><div class="metric-label">Total invoiced</div><div class="metric-value">${fmtMoney(totalInv)}</div></div>
+    <div class="metric-card"><div class="metric-label">Total received</div><div class="metric-value" style="color:var(--green)">${fmtMoney(totalPaid)}</div></div>
+    <div class="metric-card"><div class="metric-label">Total expenses</div><div class="metric-value" style="color:var(--red)">${fmtMoney(totalExp)}</div></div>`;
+  const byStatus={};db.invoices.forEach(i=>byStatus[i.status]=(byStatus[i.status]||0)+i.total);
+  document.getElementById('acc-income').innerHTML=Object.entries(byStatus).map(([s,t])=>`<div class="acct-row"><span>${badge(s)} ${s}</span><span>${fmtMoney(t)}</span></div>`).join('')||'<div class="acct-row" style="color:var(--text3)">No invoices yet.</div>';
+  document.getElementById('acc-income-total').innerHTML=`<div class="acct-total"><span>Outstanding</span><span style="color:var(--red)">${fmtMoney(totalOut)}</span></div>`;
+  const invGST=db.invoices.reduce((s,i)=>s+i.gst,0);
+  const expGST=db.expenses.reduce((s,e)=>s+e.gst,0);
+  document.getElementById('acc-gst').innerHTML=`
+    <div class="acct-row"><span>GST collected (invoices)</span><span>${fmtMoney(invGST)}</span></div>
+    <div class="acct-row"><span>GST paid (expenses)</span><span>${fmtMoney(expGST)}</span></div>
+    <div class="acct-total"><span>Net GST payable</span><span style="color:${invGST-expGST>=0?'var(--red)':'var(--green)'}"> ${fmtMoney(invGST-expGST)}</span></div>`;
+  const byCat={};db.expenses.forEach(e=>byCat[e.cat]=(byCat[e.cat]||0)+e.total);
+  document.getElementById('acc-exp').innerHTML=Object.entries(byCat).map(([c,t])=>`<div class="acct-row"><span>${c}</span><span>${fmtMoney(t)}</span></div>`).join('')||'<div class="acct-row" style="color:var(--text3)">No expenses yet.</div>';
+  document.getElementById('acc-exp-total').innerHTML=`<div class="acct-total"><span>Total</span><span style="color:var(--red)">${fmtMoney(totalExp)}</span></div>`;
+  document.getElementById('acc-profit').innerHTML=`<h3>Net position</h3><div class="amount" style="color:${profit>=0?'#7debb0':'#ff8a8a'}">${fmtMoney(profit)}</div><div class="sub">Income received minus total expenses</div>`;
+}
+
+// ═══════════════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════════════
+function renderDashboard(){
+  const t=today();
+  const now=new Date();
+  const activeC=db.clients.filter(c=>c.status==='Active').length;
+  const openM=db.matters.filter(m=>m.status==='Open'||m.status==='In progress').length;
+  const mn=now.getMonth(),yr=now.getFullYear();
+  const mthInv=db.invoices.filter(i=>{if(!i.date)return false;const d=new Date(i.date);return d.getMonth()===mn&&d.getFullYear()===yr;}).reduce((s,i)=>s+i.total,0);
+  const outstanding=db.invoices.filter(i=>i.status!=='Paid').reduce((s,i)=>s+i.total,0);
+  const overdue=db.invoices.filter(i=>i.status==='Overdue');
+  document.getElementById('dash-metrics').innerHTML=`
+    <div class="metric-card"><div class="metric-label">Active clients</div><div class="metric-value">${activeC}</div></div>
+    <div class="metric-card"><div class="metric-label">Open matters</div><div class="metric-value">${openM}</div></div>
+    <div class="metric-card"><div class="metric-label">Invoiced this month</div><div class="metric-value">${fmtMoney(mthInv)}</div></div>
+    <div class="metric-card"><div class="metric-label">Outstanding</div><div class="metric-value">${fmtMoney(outstanding)}${overdue.length?`<div class="metric-sub warn">${overdue.length} overdue</div>`:''}</div></div>`;
+  const alerts=document.getElementById('dash-alerts');
+  alerts.innerHTML='';
+  if(overdue.length)alerts.innerHTML+=`<div class="alert alert-amber">⚠ You have ${overdue.length} overdue invoice${overdue.length>1?'s':''} totalling ${fmtMoney(overdue.reduce((s,i)=>s+i.total,0))}. <a href="#" onclick="showPage('invoices')" style="color:inherit;font-weight:600;text-decoration:underline">View invoices</a></div>`;
+  const upcoming=db.appointments.filter(a=>a.date>=t).slice(0,5);
+  const apptDiv=document.getElementById('dash-appts');
+  apptDiv.innerHTML=upcoming.length?upcoming.map(a=>`<div class="dash-row"><div class="dash-row-left"><strong>${fmtDate(a.date)} ${a.time?'@ '+a.time:''}</strong><small>${clientName(a.client)} — ${a.type}</small></div>${badge(a.type)}</div>`).join(''):'<div class="empty-msg">No upcoming appointments</div>';
+  const recentInv=db.invoices.slice(-5).reverse();
+  const invDiv=document.getElementById('dash-invs');
+  invDiv.innerHTML=recentInv.length?recentInv.map(i=>`<div class="dash-row"><div class="dash-row-left"><strong>${i.num}</strong><small>${clientName(i.client)}</small></div><div style="text-align:right">${fmtMoney(i.total)}<br>${badge(i.status)}</div></div>`).join(''):'<div class="empty-msg">No invoices yet</div>';
+  const openMList=db.matters.filter(m=>m.status==='Open'||m.status==='In progress').slice(0,6);
+  const mDiv=document.getElementById('dash-matters-list');
+  mDiv.innerHTML=openMList.length?openMList.map(m=>`<div class="dash-row"><div class="dash-row-left"><strong>${m.ref}</strong><small>${clientName(m.client)} — ${m.desc}</small></div>${badge(m.status)}</div>`).join(''):'<div class="empty-msg">No open matters</div>';
+}
+
+// ═══════════════════════════════════════════════
+// ACTIVITY LOG
+// ═══════════════════════════════════════════════
+function calcActivityAmount(){
+  const hours=parseFloat(document.getElementById('act-hours').value)||0;
+  const rate=parseFloat(document.getElementById('act-rate').value)||0;
+  if(hours&&rate)document.getElementById('act-amount').value=(hours*rate).toFixed(2);
+  const mid=document.getElementById('act-matter').value;
+  if(mid&&!document.getElementById('act-rate').value){
+    const m=db.matters.find(x=>x.id===mid);
+    if(m&&m.rate)document.getElementById('act-rate').value=m.rate;
+  }
+}
+function saveActivity(){
+  const eid=v('act-id');
+  const a={id:eid||uid(),date:v('act-date'),type:v('act-type'),client:v('act-client'),matter:v('act-matter'),desc:v('act-desc'),hours:parseFloat(v('act-hours'))||0,rate:parseFloat(v('act-rate'))||0,amount:parseFloat(v('act-amount'))||0,billed:v('act-billed'),notes:v('act-notes')};
+  if(!a.date||!a.client||!a.desc){alert('Date, client and description are required.');return;}
+  if(eid){const i=db.activities.findIndex(x=>x.id===eid);if(i>-1)db.activities[i]=a;}
+  else db.activities.push(a);
+  db.activities.sort((a,b)=>b.date.localeCompare(a.date));
+  save();closeModal('m-activity');
+  clearForm(['act-hours','act-rate','act-amount','act-desc','act-notes']);
+  renderActivity();
+}
+function editActivity(id){
+  const a=db.activities.find(x=>x.id===id);if(!a)return;
+  openModal('m-activity',id);
+  populateClientSelects();
+  setFields({id:'act-id',date:'act-date',type:'act-type',client:'act-client',desc:'act-desc',notes:'act-notes',billed:'act-billed'},a);
+  document.getElementById('act-hours').value=a.hours||'';
+  document.getElementById('act-rate').value=a.rate||'';
+  document.getElementById('act-amount').value=a.amount||'';
+  if(a.client){filterMattersForClient('act-client','act-matter');setTimeout(()=>{document.getElementById('act-matter').value=a.matter||'';},50);}
+}
+function renderActivity(){
+  const msel=document.getElementById('act-filter-matter');
+  const curMat=msel?msel.value:'';
+  if(msel){
+    msel.innerHTML='<option value="">All matters</option>';
+    db.matters.forEach(m=>msel.innerHTML+=`<option value="${m.id}">${m.ref} — ${clientName(m.client)}</option>`);
+    msel.value=curMat;
+  }
+  const filterMatter=curMat;
+  let acts=db.activities;
+  if(filterMatter)acts=acts.filter(a=>a.matter===filterMatter);
+  const title=document.getElementById('activity-card-title');
+  const actionsDiv=document.getElementById('activity-card-actions');
+  const entriesDiv=document.getElementById('activity-entries');
+  if(title){
+    if(filterMatter){const m=db.matters.find(x=>x.id===filterMatter);title.textContent=m?m.ref+' — '+clientName(m.client):'Matter activity';}
+    else title.textContent='All activity';
+  }
+  const unbilledForMatter=acts.filter(a=>a.billed==='unbilled'&&a.amount>0);
+  if(actionsDiv){
+    actionsDiv.innerHTML=unbilledForMatter.length&&filterMatter
+      ?`<span style="font-size:12px;color:var(--amber)">${unbilledForMatter.length} unbilled entry${unbilledForMatter.length>1?'s':''}</span>
+         <button class="btn btn-gold btn-sm" onclick="createInvoiceFromActivity('${filterMatter}')">Create invoice from unbilled</button>`
+      :'';
+  }
+  if(!entriesDiv)return;
+  if(!acts.length){entriesDiv.innerHTML='<div class="empty-msg">No activity yet. Click "+ Log activity" to record time, court appearances, phone calls and more.</div>';return;}
+  const byDate={};
+  acts.forEach(a=>{byDate[a.date]=byDate[a.date]||[];byDate[a.date].push(a);});
+  const dates=Object.keys(byDate).sort((a,b)=>b.localeCompare(a));
+  entriesDiv.innerHTML=dates.map(date=>{
+    const dayEntries=byDate[date];
+    const dayTotal=dayEntries.reduce((s,a)=>s+(a.billed!=='no-charge'?a.amount:0),0);
+    return`<div style="background:var(--surface2);padding:8px 18px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;display:flex;justify-content:space-between">
+      <span>${fmtDate(date)}</span><span>${fmtMoney(dayTotal)}</span>
+    </div>`+dayEntries.map(a=>`
+    <div class="activity-item">
+      <div class="activity-dot dot-${a.type}" style="margin-top:5px"></div>
+      <div class="activity-body">
+        <strong>${a.desc}</strong>
+        <small>${a.type}${a.hours?' · '+a.hours+'h':''} · ${clientName(a.client)}${a.matter?' · '+matterRef(a.matter):''}${a.notes?' · '+a.notes:''}</small>
+        ${a.billed==='unbilled'&&a.amount>0?'<span class="activity-unbilled">Unbilled</span>':''}
+        ${a.billed==='no-charge'?'<span class="activity-unbilled" style="background:var(--gray-bg);color:var(--gray)">No charge</span>':''}
+        ${a.billed==='billed'?'<span class="activity-unbilled" style="background:var(--green-bg);color:var(--green)">Billed</span>':''}
+      </div>
+      <div class="activity-amount">
+        ${a.billed==='no-charge'?'<span style="color:var(--text3)">—</span>':fmtMoney(a.amount)}
+        <div style="display:flex;gap:4px;justify-content:flex-end;margin-top:4px">
+          <button class="btn btn-sm" onclick="editActivity('${a.id}')">Edit</button>
+          <button class="btn-danger" onclick="delRow('activities','${a.id}',renderActivity)">×</button>
+        </div>
+      </div>
+    </div>`).join('');
+  }).join('');
+}
+function createInvoiceFromActivity(matterId){
+  const m=db.matters.find(x=>x.id===matterId);if(!m)return;
+  const unbilled=db.activities.filter(a=>a.matter===matterId&&a.billed==='unbilled'&&a.amount>0);
+  if(!unbilled.length){alert('No unbilled activity entries for this matter.');return;}
+  const totalAmt=unbilled.reduce((s,a)=>s+a.amount,0);
+  const gst=totalAmt*0.1;
+  const lines=unbilled.map(a=>fmtDate(a.date)+': '+a.desc+(a.hours?' ('+a.hours+'h)':'')+' - '+fmtMoney(a.amount)).join('\n');
+  if(!confirm('Create invoice for '+clientName(m.client)+'?\n\nMatter: '+m.ref+'\nEntries: '+unbilled.length+'\nTotal (excl GST): '+fmtMoney(totalAmt)+'\nGST: '+fmtMoney(gst)+'\nTotal inc GST: '+fmtMoney(totalAmt+gst)+'\n\nThis will mark the entries as billed.'))return;
+  const invNum='INV-'+String(db.invoices.length+1).padStart(3,'0');
+  const due=new Date();due.setDate(due.getDate()+30);
+  const inv={id:uid(),num:invNum,client:m.client,matter:matterId,date:today(),due:due.toISOString().slice(0,10),amount:totalAmt,gst:parseFloat(gst.toFixed(2)),total:parseFloat((totalAmt+gst).toFixed(2)),status:'Draft',desc:lines};
+  db.invoices.push(inv);
+  unbilled.forEach(a=>{const act=db.activities.find(x=>x.id===a.id);if(act)act.billed='billed';});
+  save();
+  alert('Invoice '+invNum+' created successfully!\nGo to Invoices to review and send it.');
+  renderActivity();
+  showPage('invoices');
+}
+
+
 function runManualConflictCheck(){
   const name = document.getElementById('conflict-name').value.trim();
   const desc = document.getElementById('conflict-desc').value.trim();
@@ -1008,6 +1342,93 @@ function runManualConflictCheck(){
       'Review the conflicts above before deciding whether to act for this client. Record your conflict waiver decision in your file notes.</div>';
   }
 }
+
+function emailInvoice(invId){
+  const inv=db.invoices.find(x=>x.id===invId);
+  if(!inv){alert('Invoice not found.');return;}
+  const client=db.clients.find(x=>x.id===inv.client)||{};
+  const matter=db.matters.find(x=>x.id===inv.matter)||{};
+  const clientEmail=client.email||'';
+  const clientFullName=client.fname?client.fname+' '+client.lname:'Client';
+  if(!clientEmail){alert('This client does not have an email address saved.\nPlease add their email in the Clients section first.');return;}
+  const nl='%0A';
+  const sep='%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80';
+  const subject=encodeURIComponent('Invoice '+inv.num+' - Murray Edwards Legal Services');
+  let body='Dear '+encodeURIComponent(clientFullName)+','+nl+nl;
+  body+='Please find below details of Invoice '+encodeURIComponent(inv.num)+' from Murray Edwards Legal Services.'+nl+nl;
+  body+=sep+nl+'INVOICE DETAILS'+nl+sep+nl;
+  body+='Invoice No:        '+encodeURIComponent(inv.num)+nl;
+  body+='Date:              '+encodeURIComponent(fmtDate(inv.date))+nl;
+  body+='Due Date:          '+encodeURIComponent(fmtDate(inv.due))+nl;
+  if(matter.ref)body+='Matter:            '+encodeURIComponent(matter.ref+(matter.desc?' - '+matter.desc:''))+nl;
+  body+=sep+nl;
+  body+='Amount (excl GST): '+encodeURIComponent(fmtMoney(inv.amount))+nl;
+  body+='GST (10%%):         '+encodeURIComponent(fmtMoney(inv.gst))+nl;
+  body+='TOTAL DUE:         '+encodeURIComponent(fmtMoney(inv.total))+nl;
+  body+=sep+nl+nl;
+  if(inv.desc)body+='Description:'+nl+encodeURIComponent(inv.desc)+nl+nl;
+  body+='PAYMENT DETAILS'+nl;
+  body+='Account Name: Murray Edwards Legal Services'+nl;
+  body+='BSB: [000-000]'+nl+'Account No: [000 000 000]'+nl;
+  body+='Please reference '+encodeURIComponent(inv.num)+' when making payment.'+nl+nl;
+  body+='Payment is due by '+encodeURIComponent(fmtDate(inv.due))+'. Please contact me if you have any questions.'+nl+nl;
+  body+='Kind regards,'+nl+nl;
+  body+=encodeURIComponent(settings.name||'Murray Edwards')+nl;
+  body+=encodeURIComponent(settings.firm||'Murray Edwards Legal Services')+nl;
+  body+=encodeURIComponent(settings.phone||'0411 590 065')+nl;
+  body+=encodeURIComponent(settings.email||'murrayels@gmail.com')+nl;
+  body+='ABN '+encodeURIComponent(settings.abn||'22 318 545 945');
+  window.location.href='mailto:'+clientEmail+'?subject='+subject+'&body='+body;
+}
+
+function emailStatement(){
+  const cid=v('stmt-client');
+  const mid=v('stmt-matter');
+  if(!cid){alert('Please select a client from the dropdown first.');return;}
+  const client=db.clients.find(x=>x.id===cid)||{};
+  const clientFullName=client.fname?client.fname+' '+client.lname:'Client';
+  const clientEmail=client.email||'';
+  if(!clientEmail){alert('This client does not have an email address saved.\nPlease add their email in the Clients section first.');return;}
+  let invs=db.invoices.filter(i=>i.client===cid);
+  if(mid)invs=invs.filter(i=>i.matter===mid);
+  invs=invs.slice().sort((a,b)=>a.date.localeCompare(b.date));
+  if(!invs.length){alert('No invoices found for this client'+(mid?' and matter':'')+'.');return;}
+  const matterLabel=mid?(()=>{const m=db.matters.find(x=>x.id===mid);return m?m.ref+(m.desc?' - '+m.desc:''):'Selected matter';})():'All matters';
+  const totalAmt=invs.reduce((s,i)=>s+i.total,0);
+  const totalPaid=invs.filter(i=>i.status==='Paid').reduce((s,i)=>s+i.total,0);
+  const totalOut=totalAmt-totalPaid;
+  const nl='%0A';
+  const sep='%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80';
+  const subject=encodeURIComponent('Statement of Account - Murray Edwards Legal Services');
+  let body='Dear '+encodeURIComponent(clientFullName)+','+nl+nl;
+  body+='Please find your statement of account from Murray Edwards Legal Services.'+nl+nl;
+  body+=sep+nl+'STATEMENT OF ACCOUNT'+nl;
+  body+='As at '+encodeURIComponent(new Date().toLocaleDateString('en-AU',{day:'2-digit',month:'long',year:'numeric'}))+nl;
+  body+='Matter: '+encodeURIComponent(matterLabel)+nl+sep+nl;
+  body+='Invoice     Date          Total         Status'+nl;
+  body+='--------------------------------------------'+nl;
+  invs.forEach(i=>{body+=encodeURIComponent(i.num.padEnd(12)+fmtDate(i.date).padEnd(14)+fmtMoney(i.total).padEnd(14)+i.status)+nl;});
+  body+=sep+nl;
+  body+='Total invoiced:  '+encodeURIComponent(fmtMoney(totalAmt))+nl;
+  body+='Total paid:      '+encodeURIComponent(fmtMoney(totalPaid))+nl;
+  body+='Balance owing:   '+encodeURIComponent(fmtMoney(totalOut))+nl+sep+nl+nl;
+  if(totalOut>0){
+    body+='PAYMENT DETAILS'+nl+'Account Name: Murray Edwards Legal Services'+nl;
+    body+='BSB: [000-000]'+nl+'Account No: [000 000 000]'+nl;
+    body+='Please reference your invoice number(s) when making payment.'+nl+nl;
+  } else {
+    body+='Your account is fully paid - thank you!'+nl+nl;
+  }
+  body+='If you have any queries please do not hesitate to contact me.'+nl+nl;
+  body+='Kind regards,'+nl+nl;
+  body+=encodeURIComponent(settings.name||'Murray Edwards')+nl;
+  body+=encodeURIComponent(settings.firm||'Murray Edwards Legal Services')+nl;
+  body+=encodeURIComponent(settings.phone||'0411 590 065')+nl;
+  body+=encodeURIComponent(settings.email||'murrayels@gmail.com')+nl;
+  body+='ABN '+encodeURIComponent(settings.abn||'22 318 545 945');
+  window.location.href='mailto:'+clientEmail+'?subject='+subject+'&body='+body;
+}
+
 
 // ═══════════════════════════════════════════════
 // PRINT STATEMENT
