@@ -1274,81 +1274,39 @@ function emailInvoice(invId){
   const matter=db.matters.find(x=>x.id===inv.matter)||{};
   const clientEmail=client.email||'';
   const clientFullName=client.fname?client.fname+' '+client.lname:'Client';
-
-  if(!clientEmail){
-    alert('This client does not have an email address saved.\nPlease add their email in the Clients section first.');
-    return;
-  }
-
-  const subject=encodeURIComponent('Invoice '+inv.num+' — Murray Edwards Legal Services');
-
-  const body=encodeURIComponent(
-'Dear '+clientFullName+',
-
-'+
-'Please find below details of Invoice '+inv.num+' from Murray Edwards Legal Services.
-
-'+
-'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-'+
-'INVOICE DETAILS
-'+
-'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-'+
-'Invoice No:       '+inv.num+'
-'+
-'Date:             '+fmtDate(inv.date)+'
-'+
-'Due Date:         '+fmtDate(inv.due)+'
-'+
-(matter.ref?'Matter:           '+matter.ref+(matter.desc?' — '+matter.desc:'')+'
-':'')+
-'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-'+
-'Amount (excl GST): '+fmtMoney(inv.amount)+'
-'+
-'GST (10%):         '+fmtMoney(inv.gst)+'
-'+
-'TOTAL DUE:         '+fmtMoney(inv.total)+'
-'+
-'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-'+
-(inv.desc?'Description:
-'+inv.desc+'
-
-':'')+
-'Payment Details:
-'+
-'Account Name: Murray Edwards Legal Services
-'+
-'BSB: [000-000]
-'+
-'Account No: [000 000 000]
-'+
-'Please reference '+inv.num+' when making payment.
-
-'+
-'Payment is due by '+fmtDate(inv.due)+'. If you have any questions please do not hesitate to contact me.
-
-'+
-'Kind regards,
-
-'+
-(settings.name||'Murray Edwards')+'
-'+
-(settings.firm||'Murray Edwards Legal Services')+'
-'+
-(settings.phone||'0411 590 065')+'
-'+
-(settings.email||'murrayels@gmail.com')+'
-'+
-'ABN '+(settings.abn||'22 318 545 945')
-  );
-
+  if(!clientEmail){alert('This client does not have an email address saved.\nPlease add their email in the Clients section first.');return;}
+  const nl='%0A';
+  const sep='%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80';
+  const subject=encodeURIComponent('Invoice '+inv.num+' - Murray Edwards Legal Services');
+  let body='Dear '+encodeURIComponent(clientFullName)+','+nl+nl;
+  body+='Please find below details of Invoice '+encodeURIComponent(inv.num)+' from Murray Edwards Legal Services.'+nl+nl;
+  body+=sep+nl;
+  body+='INVOICE DETAILS'+nl;
+  body+=sep+nl;
+  body+='Invoice No:        '+encodeURIComponent(inv.num)+nl;
+  body+='Date:              '+encodeURIComponent(fmtDate(inv.date))+nl;
+  body+='Due Date:          '+encodeURIComponent(fmtDate(inv.due))+nl;
+  if(matter.ref)body+='Matter:            '+encodeURIComponent(matter.ref+(matter.desc?' - '+matter.desc:''))+nl;
+  body+=sep+nl;
+  body+='Amount (excl GST): '+encodeURIComponent(fmtMoney(inv.amount))+nl;
+  body+='GST (10%%):         '+encodeURIComponent(fmtMoney(inv.gst))+nl;
+  body+='TOTAL DUE:         '+encodeURIComponent(fmtMoney(inv.total))+nl;
+  body+=sep+nl+nl;
+  if(inv.desc)body+='Description:'+nl+encodeURIComponent(inv.desc)+nl+nl;
+  body+='PAYMENT DETAILS'+nl;
+  body+='Account Name: Murray Edwards Legal Services'+nl;
+  body+='BSB: [000-000]'+nl;
+  body+='Account No: [000 000 000]'+nl;
+  body+='Please reference '+encodeURIComponent(inv.num)+' when making payment.'+nl+nl;
+  body+='Payment is due by '+encodeURIComponent(fmtDate(inv.due))+'. Please contact me if you have any questions.'+nl+nl;
+  body+='Kind regards,'+nl+nl;
+  body+=encodeURIComponent(settings.name||'Murray Edwards')+nl;
+  body+=encodeURIComponent(settings.firm||'Murray Edwards Legal Services')+nl;
+  body+=encodeURIComponent(settings.phone||'0411 590 065')+nl;
+  body+=encodeURIComponent(settings.email||'murrayels@gmail.com')+nl;
+  body+='ABN '+encodeURIComponent(settings.abn||'22 318 545 945');
   window.location.href='mailto:'+clientEmail+'?subject='+subject+'&body='+body;
 }
-
 // ═══════════════════════════════════════════════
 // EMAIL STATEMENT
 // ═══════════════════════════════════════════════
@@ -1356,105 +1314,53 @@ function emailStatement(){
   const cid=v('stmt-client');
   const mid=v('stmt-matter');
   if(!cid){alert('Please select a client from the dropdown first.');return;}
-
   const client=db.clients.find(x=>x.id===cid)||{};
   const clientFullName=client.fname?client.fname+' '+client.lname:'Client';
   const clientEmail=client.email||'';
-
-  if(!clientEmail){
-    alert('This client does not have an email address saved.\nPlease add their email in the Clients section first.');
-    return;
-  }
-
-  // Filter invoices
+  if(!clientEmail){alert('This client does not have an email address saved.\nPlease add their email in the Clients section first.');return;}
   let invs=db.invoices.filter(i=>i.client===cid);
   if(mid)invs=invs.filter(i=>i.matter===mid);
   invs=invs.slice().sort((a,b)=>a.date.localeCompare(b.date));
-
   if(!invs.length){alert('No invoices found for this client'+(mid?' and matter':'')+'.');return;}
-
-  const matterLabel=mid?(()=>{const m=db.matters.find(x=>x.id===mid);return m?m.ref+(m.desc?' — '+m.desc:''):'Selected matter';})():'All matters';
+  const matterLabel=mid?(()=>{const m=db.matters.find(x=>x.id===mid);return m?m.ref+(m.desc?' - '+m.desc:''):'Selected matter';})():'All matters';
   const totalAmt=invs.reduce((s,i)=>s+i.total,0);
   const totalPaid=invs.filter(i=>i.status==='Paid').reduce((s,i)=>s+i.total,0);
   const totalOut=totalAmt-totalPaid;
-
-  // Build invoice lines
-  const lines=invs.map(i=>
-    i.num.padEnd(12)+fmtDate(i.date).padEnd(14)+fmtMoney(i.total).padEnd(14)+i.status
-  ).join('\n');
-
-  const subject=encodeURIComponent('Statement of Account — Murray Edwards Legal Services');
-
-  const body=encodeURIComponent(
-'Dear '+clientFullName+',
-
-'+
-'Please find below your statement of account from Murray Edwards Legal Services.
-
-'+
-'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-'+
-'STATEMENT OF ACCOUNT
-'+
-'As at '+new Date().toLocaleDateString('en-AU',{day:'2-digit',month:'long',year:'numeric'})+'
-'+
-'Matter: '+matterLabel+'
-'+
-'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-'+
-'Invoice     Date          Amount        Status
-'+
-'─────────────────────────────────────────────
-'+
-lines+'
-'+
-'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-'+
-'Total invoiced:    '+fmtMoney(totalAmt)+'
-'+
-'Total paid:        '+fmtMoney(totalPaid)+'
-'+
-'Balance owing:     '+fmtMoney(totalOut)+'
-'+
-'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-'+
-(totalOut>0?
-'Payment Details:
-'+
-'Account Name: Murray Edwards Legal Services
-'+
-'BSB: [000-000]
-'+
-'Account No: [000 000 000]
-'+
-'Please reference your invoice number(s) when making payment.
-
-'
-:'Your account is fully paid — thank you!
-
-')+
-'If you have any queries regarding this statement please do not hesitate to contact me.
-
-'+
-'Kind regards,
-
-'+
-(settings.name||'Murray Edwards')+'
-'+
-(settings.firm||'Murray Edwards Legal Services')+'
-'+
-(settings.phone||'0411 590 065')+'
-'+
-(settings.email||'murrayels@gmail.com')+'
-'+
-'ABN '+(settings.abn||'22 318 545 945')
-  );
-
+  const nl='%0A';
+  const sep='%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80%E2%94%80';
+  const subject=encodeURIComponent('Statement of Account - Murray Edwards Legal Services');
+  let body='Dear '+encodeURIComponent(clientFullName)+','+nl+nl;
+  body+='Please find your statement of account from Murray Edwards Legal Services.'+nl+nl;
+  body+=sep+nl+'STATEMENT OF ACCOUNT'+nl;
+  body+='As at '+encodeURIComponent(new Date().toLocaleDateString('en-AU',{day:'2-digit',month:'long',year:'numeric'}))+nl;
+  body+='Matter: '+encodeURIComponent(matterLabel)+nl;
+  body+=sep+nl;
+  body+='Invoice     Date          Total         Status'+nl;
+  body+='--------------------------------------------'+nl;
+  invs.forEach(i=>{body+=encodeURIComponent(i.num.padEnd(12)+fmtDate(i.date).padEnd(14)+fmtMoney(i.total).padEnd(14)+i.status)+nl;});
+  body+=sep+nl;
+  body+='Total invoiced:  '+encodeURIComponent(fmtMoney(totalAmt))+nl;
+  body+='Total paid:      '+encodeURIComponent(fmtMoney(totalPaid))+nl;
+  body+='Balance owing:   '+encodeURIComponent(fmtMoney(totalOut))+nl;
+  body+=sep+nl+nl;
+  if(totalOut>0){
+    body+='PAYMENT DETAILS'+nl;
+    body+='Account Name: Murray Edwards Legal Services'+nl;
+    body+='BSB: [000-000]'+nl;
+    body+='Account No: [000 000 000]'+nl;
+    body+='Please reference your invoice number(s) when making payment.'+nl+nl;
+  } else {
+    body+='Your account is fully paid - thank you!'+nl+nl;
+  }
+  body+='If you have any queries please do not hesitate to contact me.'+nl+nl;
+  body+='Kind regards,'+nl+nl;
+  body+=encodeURIComponent(settings.name||'Murray Edwards')+nl;
+  body+=encodeURIComponent(settings.firm||'Murray Edwards Legal Services')+nl;
+  body+=encodeURIComponent(settings.phone||'0411 590 065')+nl;
+  body+=encodeURIComponent(settings.email||'murrayels@gmail.com')+nl;
+  body+='ABN '+encodeURIComponent(settings.abn||'22 318 545 945');
   window.location.href='mailto:'+clientEmail+'?subject='+subject+'&body='+body;
 }
-
-
 // ═══════════════════════════════════════════════
 // CONFLICT OF INTEREST CHECKER
 // ═══════════════════════════════════════════════
