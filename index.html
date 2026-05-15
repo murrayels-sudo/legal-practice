@@ -187,7 +187,7 @@ tbody tr:hover td{background:#fafaf8}
       <a class="nav-item" onclick="showPage('activity')" href="#"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 8h14M1 4h14M1 12h8"/></svg>Activity Log</a>
       <a class="nav-item" onclick="showPage('documents')" href="#"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 1H4a1 1 0 00-1 1v12a1 1 0 001 1h8a1 1 0 001-1V5L9 1z"/><path d="M9 1v4h4"/></svg>Documents</a>
       <div class="nav-sec">Accounts</div>
-      <a class="nav-item" onclick="showPage(\'invoices\')" href="#"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="2" width="14" height="12" rx="1"/><path d="M5 6h6M5 9h4M5 12h2"/></svg>Invoices</a>
+      <a class="nav-item" onclick="showPage('invoices')" href="#"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="2" width="14" height="12" rx="1"/><path d="M5 6h6M5 9h4M5 12h2"/></svg>Invoices</a>
       <a class="nav-item" onclick="showPage('expenses')" href="#"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v6M6 7h3.5a1.5 1.5 0 010 3H6"/></svg>Expenses</a>
       <a class="nav-item" onclick="showPage('accounts')" href="#"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12v8H2z"/><path d="M2 7h12"/><path d="M5 10h2"/></svg>Accounts</a>
       <div class="nav-sec">System</div>
@@ -338,6 +338,9 @@ tbody tr:hover td{background:#fafaf8}
             <div class="fg span2"><label>Address</label><input id="set-address"></div>
             <div class="fg"><label>ABN</label><input id="set-abn"></div>
             <div class="fg"><label>Default hourly rate ($)</label><input id="set-rate" type="number"></div>
+            <div class="fg"><label>Bank BSB</label><input id="set-bsb" placeholder="000-000"></div>
+            <div class="fg"><label>Bank account number</label><input id="set-acct" placeholder="000 000 000"></div>
+            <div class="fg"><label>Account name</label><input id="set-acctname" placeholder="Murray Edwards Legal Services"></div>
           </div>
           <div style="display:flex;gap:10px;margin-top:8px">
             <button class="btn btn-primary" onclick="saveSettings()">Save details</button>
@@ -535,7 +538,7 @@ function changePassword(){
 
 // DATA
 var db={clients:[],matters:[],appointments:[],documents:[],invoices:[],expenses:[],activities:[]};
-var settings={firm:'Murray Edwards Legal Services',name:'Murray Edwards',phone:'0411 590 065',email:'murrayels@gmail.com',address:'Central Coast, NSW',abn:'22 318 545 945',rate:350};
+var settings={firm:'Murray Edwards Legal Services',name:'Murray Edwards',phone:'0411 590 065',email:'murrayels@gmail.com',address:'Central Coast, NSW',abn:'22 318 545 945',rate:350,bsb:'',acct:'',acctname:'Murray Edwards Legal Services'};
 try{var _s=localStorage.getItem('mel_db');if(_s){db=JSON.parse(_s);if(!db.activities)db.activities=[];}}catch(e){}
 try{var _t=localStorage.getItem('mel_settings');if(_t)settings=Object.assign(settings,JSON.parse(_t));}catch(e){}
 function save(){try{localStorage.setItem('mel_db',JSON.stringify(db));}catch(e){alert('Storage error: '+e.message);}}
@@ -551,7 +554,7 @@ function badge(s){
   return '<span class="badge '+(map[s]||'bx')+'">'+s+'</span>';
 }
 function saveSettings(){
-  settings={firm:v('set-firm'),name:v('set-name'),phone:v('set-phone'),email:v('set-email'),address:v('set-address'),abn:v('set-abn'),rate:parseFloat(v('set-rate'))||350};
+  settings={firm:v('set-firm'),name:v('set-name'),phone:v('set-phone'),email:v('set-email'),address:v('set-address'),abn:v('set-abn'),rate:parseFloat(v('set-rate'))||350,bsb:v('set-bsb'),acct:v('set-acct'),acctname:v('set-acctname')};
   localStorage.setItem('mel_settings',JSON.stringify(settings));
   var msg=document.getElementById('set-saved');msg.textContent='Saved!';setTimeout(function(){msg.textContent='';},2000);
 }
@@ -587,6 +590,9 @@ function showPage(name){
     document.getElementById('set-phone').value=settings.phone;document.getElementById('set-email').value=settings.email;
     document.getElementById('set-address').value=settings.address;document.getElementById('set-abn').value=settings.abn;
     document.getElementById('set-rate').value=settings.rate;
+    document.getElementById('set-bsb').value=settings.bsb||'';
+    document.getElementById('set-acct').value=settings.acct||'';
+    document.getElementById('set-acctname').value=settings.acctname||'Murray Edwards Legal Services';
   }
   if(name==='conflicts')document.getElementById('conflict-results').innerHTML='';
   window.scrollTo(0,0);
@@ -959,7 +965,7 @@ function printInvoice(invId){
   h+='<div style="display:flex;gap:32px;padding:20px 32px"><div style="flex:1"><div style="font-size:10px;font-weight:700;color:#B8972A;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">Bill To</div><div style="font-size:15px;font-weight:700;color:#1B2A4A">'+cfn+'</div>'+(client.address?'<div style="font-size:13px;color:#555;margin-top:3px">'+client.address+'</div>':'')+(client.email?'<div style="font-size:13px;color:#555;margin-top:3px">'+client.email+'</div>':'')+(client.phone?'<div style="font-size:13px;color:#555;margin-top:3px">'+client.phone+'</div>':'')+'</div>'+(matter.ref?'<div style="flex:1"><div style="font-size:10px;font-weight:700;color:#B8972A;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">Matter</div><div style="font-size:13px;font-weight:700;color:#1B2A4A">'+matter.ref+'</div>'+(matter.desc?'<div style="font-size:13px;color:#555;margin-top:3px">'+matter.desc+'</div>':'')+'</div>':'')+'</div>';
   h+='<div style="margin:0 32px"><table style="width:100%;border-collapse:collapse"><thead><tr style="background:#1B2A4A"><th style="padding:11px 14px;text-align:left;font-size:12px;color:#fff;font-weight:600">Description</th><th style="padding:11px 14px;text-align:center;font-size:12px;color:#fff;font-weight:600;width:80px">Hours</th><th style="padding:11px 14px;text-align:right;font-size:12px;color:#fff;font-weight:600;width:100px">Rate</th><th style="padding:11px 14px;text-align:right;font-size:12px;color:#fff;font-weight:600;width:110px">Amount</th></tr></thead><tbody>'+liHTML+'</tbody></table></div>';
   h+='<div style="display:flex;justify-content:flex-end;margin:0 32px"><table style="border-collapse:collapse;min-width:280px"><tr><td style="padding:8px 14px;font-size:13px;color:#555;text-align:right;border-bottom:1px solid #eee">Subtotal</td><td style="padding:8px 14px;font-size:13px;text-align:right;border-bottom:1px solid #eee">'+fmtMoney(inv.amount)+'</td></tr><tr><td style="padding:8px 14px;font-size:13px;color:#555;text-align:right;border-bottom:1px solid #eee">GST (10%)</td><td style="padding:8px 14px;font-size:13px;text-align:right;border-bottom:1px solid #eee">'+fmtMoney(inv.gst)+'</td></tr><tr style="background:#1B2A4A"><td style="padding:11px 14px;font-size:14px;font-weight:700;color:#fff;text-align:right">TOTAL DUE</td><td style="padding:11px 14px;font-size:14px;font-weight:700;color:#B8972A;text-align:right">'+fmtMoney(inv.total)+'</td></tr></table></div>';
-  h+='<div style="margin:24px 32px 0;background:#f8f7f5;border-top:2px solid #B8972A;border-bottom:2px solid #B8972A;padding:16px"><div style="font-size:11px;font-weight:700;color:#1B2A4A;letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px">Payment Details</div><div style="font-size:12px;color:#555;line-height:1.8"><strong>Account name:</strong> Murray Edwards Legal Services &nbsp;&nbsp;<strong>BSB:</strong> [000-000] &nbsp;&nbsp;<strong>Account No:</strong> [000 000 000]<br>Please reference <strong>'+inv.num+'</strong> when making payment. Payment due within 30 days.</div></div>';
+  h+='<div style="margin:24px 32px 0;background:#f8f7f5;border-top:2px solid #B8972A;border-bottom:2px solid #B8972A;padding:16px"><div style="font-size:11px;font-weight:700;color:#1B2A4A;letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px">Payment Details</div><div style="font-size:12px;color:#555;line-height:1.8"><strong>Account name:</strong> '+(settings.acctname||'Murray Edwards Legal Services')+'&nbsp;&nbsp;<strong>BSB:</strong> '+(settings.bsb||'[Add BSB in Settings]')+'&nbsp;&nbsp;<strong>Account No:</strong> '+(settings.acct||'[Add account number in Settings]')+'<br>Please reference <strong>'+inv.num+'</strong> when making payment. Payment due within 30 days.</div></div>';
   h+='<div style="margin:20px 32px;text-align:center;font-size:11px;color:#aaa;border-top:1px solid #eee;padding-top:14px">Murray Edwards Legal Services &bull; ABN '+settings.abn+'</div>';
   h+='</div><button class="pb np" onclick="window.print()">Print / Save as PDF</button></body></html>';
   var w=window.open('','_blank');w.document.write(h);w.document.close();
@@ -978,7 +984,7 @@ function emailInvoice(invId){
   body+='Invoice No: '+encodeURIComponent(inv.num)+nl+'Date: '+encodeURIComponent(fmtDate(inv.date))+nl+'Due Date: '+encodeURIComponent(fmtDate(inv.due))+nl;
   if(matter.ref)body+='Matter: '+encodeURIComponent(matter.ref+(matter.desc?' - '+matter.desc:''))+nl;
   body+=nl+'Amount (excl GST): '+encodeURIComponent(fmtMoney(inv.amount))+nl+'GST (10%): '+encodeURIComponent(fmtMoney(inv.gst))+nl+'TOTAL DUE: '+encodeURIComponent(fmtMoney(inv.total))+nl+nl;
-  body+='Payment Details:'+nl+'Account Name: Murray Edwards Legal Services'+nl+'BSB: [000-000]'+nl+'Account No: [000 000 000]'+nl+'Reference: '+encodeURIComponent(inv.num)+nl+nl;
+  body+='Payment Details:'+nl+'Account Name: '+(settings.acctname||'Murray Edwards Legal Services')+nl+'BSB: '+(settings.bsb||'[Add BSB in Settings]')+nl+'Account No: '+(settings.acct||'[Add account in Settings]')+nl+'Reference: '+encodeURIComponent(inv.num)+nl+nl;
   body+='Kind regards,'+nl+nl+encodeURIComponent(settings.name)+nl+encodeURIComponent(settings.firm)+nl+encodeURIComponent(settings.phone)+nl+encodeURIComponent(settings.email)+nl+'ABN '+encodeURIComponent(settings.abn);
   window.location.href='mailto:'+client.email+'?subject='+subject+'&body='+body;
 }
@@ -1011,7 +1017,7 @@ function printStatement(){
   h+='<div style="height:2px;background:#B8972A;margin:0 32px 20px"></div>';
   h+='<div style="display:flex;gap:12px;margin:0 32px 24px"><div style="flex:1;background:#f8f7f5;border:1px solid #e0ddd8;border-radius:8px;padding:14px;text-align:center"><div style="font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Total Invoiced</div><div style="font-size:22px;font-weight:700;color:#1B2A4A">'+fmtMoney(tA)+'</div></div><div style="flex:1;background:#eaf5ec;border:1px solid #a0d8a8;border-radius:8px;padding:14px;text-align:center"><div style="font-size:10px;font-weight:700;color:#2d7a3a;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Total Paid</div><div style="font-size:22px;font-weight:700;color:#2d7a3a">'+fmtMoney(tP)+'</div></div><div style="flex:1;background:'+(tO>0?'#fdf0f0':'#eaf5ec')+';border:1px solid '+(tO>0?'#f0a0a0':'#a0d8a8')+';border-radius:8px;padding:14px;text-align:center"><div style="font-size:10px;font-weight:700;color:'+(tO>0?'#a32d2d':'#2d7a3a')+';text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Balance Outstanding</div><div style="font-size:22px;font-weight:700;color:'+(tO>0?'#a32d2d':'#2d7a3a')+'">'+fmtMoney(tO)+'</div></div><div style="flex:1;background:#f8f7f5;border:1px solid #e0ddd8;border-radius:8px;padding:14px;text-align:center"><div style="font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">GST Charged</div><div style="font-size:22px;font-weight:700;color:#1B2A4A">'+fmtMoney(tG)+'</div></div></div>';
   h+='<div style="margin:0 32px"><table style="width:100%;border-collapse:collapse"><thead><tr style="background:#1B2A4A"><th style="padding:10px 14px;text-align:left;font-size:11px;color:#fff;font-weight:600">Date</th><th style="padding:10px 14px;text-align:left;font-size:11px;color:#fff;font-weight:600">Invoice #</th><th style="padding:10px 14px;text-align:left;font-size:11px;color:#fff;font-weight:600">Description</th><th style="padding:10px 14px;text-align:right;font-size:11px;color:#fff;font-weight:600">Due Date</th><th style="padding:10px 14px;text-align:right;font-size:11px;color:#fff;font-weight:600">GST</th><th style="padding:10px 14px;text-align:right;font-size:11px;color:#fff;font-weight:600">Total</th><th style="padding:10px 14px;text-align:right;font-size:11px;color:#fff;font-weight:600">Status</th></tr></thead><tbody>'+bHTML+'</tbody><tfoot><tr style="background:#1B2A4A"><td colspan="5" style="padding:12px 14px;font-size:13px;font-weight:700;color:#fff">TOTAL</td><td style="padding:12px 14px;font-size:14px;font-weight:700;color:#B8972A;text-align:right">'+fmtMoney(tA)+'</td><td style="padding:12px 14px;font-size:13px;font-weight:700;color:'+(tO>0?'#ff9999':'#99ffaa')+';text-align:right">'+(tO>0?fmtMoney(tO)+' owing':'Fully paid')+'</td></tr></tfoot></table></div>';
-  h+=(tO>0?'<div style="margin:24px 32px 0;background:#fdf3e0;border-top:2px solid #B8972A;border-bottom:2px solid #B8972A;padding:14px"><div style="font-size:11px;font-weight:700;color:#1B2A4A;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px">Payment Details</div><div style="font-size:12px;color:#555;line-height:1.8"><strong>Account name:</strong> Murray Edwards Legal Services &nbsp;&nbsp;<strong>BSB:</strong> [000-000] &nbsp;&nbsp;<strong>Account No:</strong> [000 000 000]<br>Please reference your invoice number(s) when making payment.</div></div>':'<div style="margin:24px 32px 0;background:#eaf5ec;border:1px solid #a0d8a8;border-radius:8px;padding:14px;text-align:center;font-size:13px;color:#2d7a3a;font-weight:600">&#10003; Account fully paid &mdash; thank you!</div>');
+  h+=(tO>0?'<div style="margin:24px 32px 0;background:#fdf3e0;border-top:2px solid #B8972A;border-bottom:2px solid #B8972A;padding:14px"><div style="font-size:11px;font-weight:700;color:#1B2A4A;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px">Payment Details</div><div style="font-size:12px;color:#555;line-height:1.8"><strong>Account name:</strong> '+(settings.acctname||'Murray Edwards Legal Services')+'&nbsp;&nbsp;<strong>BSB:</strong> '+(settings.bsb||'[Add BSB in Settings]')+'&nbsp;&nbsp;<strong>Account No:</strong> '+(settings.acct||'[Add account number in Settings]')+'<br>Please reference your invoice number(s) when making payment.</div></div>':'<div style="margin:24px 32px 0;background:#eaf5ec;border:1px solid #a0d8a8;border-radius:8px;padding:14px;text-align:center;font-size:13px;color:#2d7a3a;font-weight:600">&#10003; Account fully paid &mdash; thank you!</div>');
   h+='<div style="margin:20px 32px;text-align:center;font-size:11px;color:#aaa;border-top:1px solid #eee;padding-top:14px">Murray Edwards Legal Services &bull; ABN '+settings.abn+'</div>';
   h+='</div><button class="pb np" onclick="window.print()">Print / Save as PDF</button></body></html>';
   var w=window.open('','_blank');w.document.write(h);w.document.close();
@@ -1036,7 +1042,7 @@ function emailStatement(){
   body+='Invoice     Date          Total         Status'+nl+'--------------------------------------------'+nl;
   invs.forEach(function(i){body+=encodeURIComponent(i.num.padEnd(12)+fmtDate(i.date).padEnd(14)+fmtMoney(i.total).padEnd(14)+i.status)+nl;});
   body+=nl+'Total invoiced: '+encodeURIComponent(fmtMoney(tA))+nl+'Total paid: '+encodeURIComponent(fmtMoney(tP))+nl+'Balance owing: '+encodeURIComponent(fmtMoney(tO))+nl+nl;
-  if(tO>0){body+='Payment Details:'+nl+'Account Name: Murray Edwards Legal Services'+nl+'BSB: [000-000]'+nl+'Account No: [000 000 000]'+nl+nl;}
+  if(tO>0){body+='Payment Details:'+nl+'Account Name: '+(settings.acctname||'Murray Edwards Legal Services')+nl+'BSB: '+(settings.bsb||'[Add BSB in Settings]')+nl+'Account No: '+(settings.acct||'[Add account in Settings]')+nl+nl;}
   else{body+='Your account is fully paid - thank you!'+nl+nl;}
   body+='Kind regards,'+nl+nl+encodeURIComponent(settings.name)+nl+encodeURIComponent(settings.firm)+nl+encodeURIComponent(settings.phone)+nl+encodeURIComponent(settings.email)+nl+'ABN '+encodeURIComponent(settings.abn);
   window.location.href='mailto:'+client.email+'?subject='+subject+'&body='+body;
